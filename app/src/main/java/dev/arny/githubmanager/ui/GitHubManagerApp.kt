@@ -494,9 +494,9 @@ private fun FileBrowser(browser: BrowserState, vm: MainViewModel) {
     Column(Modifier.fillMaxSize()) {
         // Back navigation for files lives in the app bar; breadcrumbs only for directories.
         if (browser.fileName == null && browser.directoryPath.isNotEmpty()) {
-            Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp),
+            // The app bar arrow already navigates up; keep this row as pure breadcrumbs.
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = vm::browserBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Уровень выше") }
                 val segments = remember(browser.directoryPath) {
                     browser.directoryPath.split('/').filter { it.isNotEmpty() }
                 }
