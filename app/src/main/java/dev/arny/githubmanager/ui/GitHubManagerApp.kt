@@ -469,34 +469,30 @@ private fun SettingsScreen(repo: GitHubRepository, mutating: Boolean, onChange: 
 @Composable
 private fun FileBrowser(browser: BrowserState, vm: MainViewModel) {
     Column(Modifier.fillMaxSize()) {
-        if (browser.fileName != null || browser.directoryPath.isNotEmpty()) {
+        // Back navigation for files lives in the app bar; breadcrumbs only for directories.
+        if (browser.fileName == null && browser.directoryPath.isNotEmpty()) {
             Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp),
                 verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = vm::browserBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Уровень выше") }
-                if (browser.fileName != null) {
-                    Text(browser.fileName, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                } else {
-                    val segments = remember(browser.directoryPath) {
-                        browser.directoryPath.split('/').filter { it.isNotEmpty() }
-                    }
-                    Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()),
-                        verticalAlignment = Alignment.CenterVertically) {
-                        Text("Корень", Modifier.clickable { vm.loadDirectory("") },
+                val segments = remember(browser.directoryPath) {
+                    browser.directoryPath.split('/').filter { it.isNotEmpty() }
+                }
+                Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Text("Корень", Modifier.clickable { vm.loadDirectory("") },
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary)
+                    segments.forEachIndexed { index, segment ->
+                        Text(" / ", style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(segment,
+                            modifier = Modifier.clickable {
+                                vm.loadDirectory(segments.take(index + 1).joinToString("/"))
+                            },
                             style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary)
-                        segments.forEachIndexed { index, segment ->
-                            Text(" / ", style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(segment,
-                                modifier = Modifier.clickable {
-                                    vm.loadDirectory(segments.take(index + 1).joinToString("/"))
-                                },
-                                style = MaterialTheme.typography.labelLarge,
-                                color = if (index == segments.lastIndex) MaterialTheme.colorScheme.onSurface
-                                else MaterialTheme.colorScheme.primary,
-                                maxLines = 1)
-                        }
+                            color = if (index == segments.lastIndex) MaterialTheme.colorScheme.onSurface
+                            else MaterialTheme.colorScheme.primary,
+                            maxLines = 1)
                     }
                 }
             }
@@ -580,11 +576,14 @@ private fun FileContentPanel(browser: BrowserState) {
     var preview by remember(name, browser.directoryPath) { mutableStateOf(isMarkdown) }
     Column(Modifier.fillMaxSize()) {
         if (isMarkdown) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Markdown", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
-                FilterChip(selected = preview, onClick = { preview = true }, label = { Text("Просмотр") })
-                FilterChip(selected = !preview, onClick = { preview = false }, label = { Text("Исходник") })
+            Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Text(name, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                IconButton(onClick = { preview = !preview }) {
+                    Icon(if (preview) Icons.Default.Code else Icons.Default.Description,
+                        if (preview) "Показать исходник" else "Показать отформатированный текст")
+                }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         }
@@ -592,7 +591,7 @@ private fun FileContentPanel(browser: BrowserState) {
             MarkdownViewer(browser.fileBody.orEmpty(), modifier = Modifier.fillMaxSize())
         } else {
             CodeViewer(fileName = name, filePath = browser.directoryPath,
-                code = browser.fileBody.orEmpty(), url = browser.fileUrl)
+                code = browser.fileBody.orEmpty(), url = browser.fileUrl, showPath = !isMarkdown)
         }
     }
 }

@@ -29,7 +29,7 @@ import dev.hossain.highlight.ui.rememberHighlightedCode
 
 /** Read-only code viewport; page size stays bounded even for 200 KB GitHub API files. */
 @Composable
-fun CodeViewer(fileName: String, filePath: String, code: String, url: String?) {
+fun CodeViewer(fileName: String, filePath: String, code: String, url: String?, showPath: Boolean = true) {
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
     val fullPath = if (filePath.isEmpty()) fileName else "$filePath/$fileName"
@@ -58,7 +58,7 @@ fun CodeViewer(fileName: String, filePath: String, code: String, url: String?) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Column(Modifier.weight(1f)) {
-                Text(fullPath, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                if (showPath) Text(fullPath, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.labelMedium)
                 Text("$language · ${code.length} символов · ${pages.last().lastLine} строк",
                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
