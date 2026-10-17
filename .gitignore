@@ -1,0 +1,12 @@
+.gradle/
+.idea/
+build/
+**/build/
+local.properties
+*.iml
+*.jks
+*.keystore
+*.apk
+.DS_Store
+.kotlin/
+.taskbridge-input/
