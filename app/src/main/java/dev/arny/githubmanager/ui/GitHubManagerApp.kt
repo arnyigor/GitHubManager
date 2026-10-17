@@ -106,12 +106,19 @@ fun GitHubManagerApp(state: AppState, vm: MainViewModel) {
                         title = {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Icon(Icons.Default.Code, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                val onSection = state.screen == Screen.DETAILS && state.detailTab != DetailTab.FILES
                                 Column {
-                                    Text(if (state.screen == Screen.DETAILS) state.selected?.name ?: "Репозиторий" else "Репозитории",
+                                    Text(
+                                        when {
+                                            state.screen != Screen.DETAILS -> "Репозитории"
+                                            onSection -> detailTabLabel(state.detailTab)
+                                            else -> state.selected?.name ?: "Репозиторий"
+                                        },
                                         maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold,
                                         style = MaterialTheme.typography.titleMedium)
-                                    if (state.screen == Screen.DETAILS && state.detailTab != DetailTab.FILES) {
-                                        Text(detailTabLabel(state.detailTab), maxLines = 1,
+                                    if (onSection) {
+                                        Text(state.selected?.name ?: "", maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
@@ -641,18 +648,6 @@ private fun ReleasesScreen(
 ) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Релизы", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text("Версии, заметки и файлы для загрузки", style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                IconButton(onClick = refresh, enabled = !state.loading) {
-                    Icon(Icons.Default.Refresh, "Обновить релизы без кэша")
-                }
-            }
-        }
         if (state.error != null) item {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(state.error, color = MaterialTheme.colorScheme.error)
