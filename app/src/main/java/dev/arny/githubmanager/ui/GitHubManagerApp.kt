@@ -99,7 +99,7 @@ fun GitHubManagerApp(state: AppState, vm: MainViewModel) {
                         title = {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Icon(Icons.Default.Code, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                                Text(if (state.screen == Screen.DETAILS) state.selected?.name ?: "Репозиторий" else "GitHub Manager",
+                                Text(if (state.screen == Screen.DETAILS) state.selected?.name ?: "Репозиторий" else "Репозитории",
                                     maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold,
                                     style = MaterialTheme.typography.titleMedium)
                             }
@@ -252,35 +252,31 @@ private fun RepositoryScreen(state: AppState, vm: MainViewModel) {
         filterRepositories(state.repos, state.search, state.filter)
     }
     Column(Modifier.fillMaxSize()) {
-        Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 10.dp)) {
-            Text("ВАШЕ РАБОЧЕЕ ПРОСТРАНСТВО", style = MaterialTheme.typography.labelSmall,
-                letterSpacing = 1.3.sp, color = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.height(5.dp))
-            Text("Репозитории", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(6.dp))
-            Text("@${state.profile?.login ?: "—"}  ·  Загружено ${state.repos.size}",
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(18.dp))
+        Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(value = state.search, onValueChange = vm::setSearch,
                 placeholder = { Text("Найти репозиторий…") }, singleLine = true,
-                leadingIcon = { Icon(Icons.Default.Search, null) },
+                leadingIcon = { Icon(Icons.Default.Search, null, Modifier.size(18.dp)) },
+                textStyle = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
-            Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(VisibilityFilter.ALL to "Все", VisibilityFilter.PUBLIC to "Public", VisibilityFilter.PRIVATE to "Private")
                     .forEach { (filter, label) ->
                         FilterChip(selected = state.filter == filter, onClick = { vm.setFilter(filter) },
-                            label = { Text(label) }, shape = RoundedCornerShape(10.dp))
+                            label = { Text(label, style = MaterialTheme.typography.labelMedium) },
+                            shape = RoundedCornerShape(10.dp))
                     }
+                Spacer(Modifier.weight(1f))
+                Text("@${state.profile?.login ?: "—"} · ${shown.size}",
+                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            Text("В списке: ${shown.size} · Поиск только по загруженным", style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (state.loading && state.page == 0) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         } else {
-            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (shown.isEmpty()) item {
                     EmptyPanel("Ничего не найдено", "Измените запрос или фильтр. Возможно, нужно загрузить следующую страницу.")
                 }
@@ -301,34 +297,31 @@ private fun RepositoryScreen(state: AppState, vm: MainViewModel) {
 
 @Composable
 private fun RepositoryRow(repo: GitHubRepository, onClick: () -> Unit) {
-    Surface(onClick = onClick, shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surface,
+    Surface(onClick = onClick, shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
-        Row(Modifier.fillMaxWidth().padding(15.dp), verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Surface(shape = RoundedCornerShape(11.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
-                Icon(Icons.Default.Folder, null, Modifier.padding(11.dp).size(23.dp), tint = MaterialTheme.colorScheme.primary)
-            }
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Icon(Icons.Default.Folder, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(repo.name, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleSmall,
                         maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                     VisibilityPill(repo.private)
                 }
-                Text(repo.owner.login, style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                 if (!repo.description.isNullOrBlank()) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(repo.description, style = MaterialTheme.typography.bodySmall, maxLines = 2,
+                    Text(repo.description, style = MaterialTheme.typography.bodySmall, maxLines = 1,
                         overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Spacer(Modifier.height(9.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(repo.owner.login, style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                     repo.language?.let { LanguageLabel(it) }
                     Text(repo.updatedAt?.take(10) ?: "—", style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp))
         }
     }
 }
@@ -382,19 +375,15 @@ private fun DetailScreen(state: AppState, vm: MainViewModel) {
     val repo = state.selected ?: return
     var confirmTarget by remember(repo.id, repo.private) { mutableStateOf<Boolean?>(null) }
     Column(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp)) {
-            Text(repo.owner.login + " /", style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(2.dp))
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(repo.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(repo.owner.login, style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                 VisibilityPill(repo.private)
-            }
-            if (!repo.description.isNullOrBlank()) {
-                Spacer(Modifier.height(8.dp))
-                Text(repo.description, style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+                repo.language?.let { LanguageLabel(it) }
+                Spacer(Modifier.weight(1f))
+                Text(repo.updatedAt?.take(10) ?: "", style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         val context = LocalContext.current
@@ -408,11 +397,11 @@ private fun DetailScreen(state: AppState, vm: MainViewModel) {
             DetailTab.FILES -> 0; DetailTab.RELEASES -> 1; DetailTab.OVERVIEW -> 2
         }, containerColor = MaterialTheme.colorScheme.surface) {
             Tab(selected = state.detailTab == DetailTab.FILES, onClick = { vm.setDetailTab(DetailTab.FILES) },
-                text = { Text("Код") }, icon = { Icon(Icons.Default.Code, null, Modifier.size(17.dp)) })
+                text = { Text("Код") })
             Tab(selected = state.detailTab == DetailTab.RELEASES, onClick = { vm.setDetailTab(DetailTab.RELEASES) },
-                text = { Text("Релизы") }, icon = { Icon(Icons.Default.Inventory2, null, Modifier.size(17.dp)) })
+                text = { Text("Релизы") })
             Tab(selected = state.detailTab == DetailTab.OVERVIEW, onClick = { vm.setDetailTab(DetailTab.OVERVIEW) },
-                text = { Text("Настройки") }, icon = { Icon(Icons.Default.Settings, null, Modifier.size(17.dp)) })
+                text = { Text("Настройки") })
         }
         when (state.detailTab) {
             DetailTab.FILES -> FileBrowser(state.browser, vm)
@@ -480,48 +469,39 @@ private fun SettingsScreen(repo: GitHubRepository, mutating: Boolean, onChange: 
 @Composable
 private fun FileBrowser(browser: BrowserState, vm: MainViewModel) {
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically) {
-            if (browser.fileName != null || browser.directoryPath.isNotEmpty()) {
+        if (browser.fileName != null || browser.directoryPath.isNotEmpty()) {
+            Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp),
+                verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = vm::browserBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Уровень выше") }
-            } else Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(if (browser.fileName != null) "ФАЙЛ" else "ДЕРЕВО ФАЙЛОВ",
-                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                Text(if (browser.fileName != null) browser.fileName else
-                    if (browser.directoryPath.isEmpty()) "/" else "/${browser.directoryPath}",
-                    maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold)
-            }
-            if (browser.fileName == null) IconButton(onClick = vm::refreshBrowser) {
-                Icon(Icons.Default.Refresh, "Обновить папку")
-            }
-        }
-        if (browser.directoryPath.isNotEmpty()) {
-            val segments = remember(browser.directoryPath) {
-                browser.directoryPath.split('/').filter { it.isNotEmpty() }
-            }
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 18.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Корень", Modifier.clickable { vm.loadDirectory("") },
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary)
-                segments.forEachIndexed { index, segment ->
-                    Text(" / ", style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(segment,
-                        modifier = Modifier.clickable {
-                            vm.loadDirectory(segments.take(index + 1).joinToString("/"))
-                        },
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary)
+                if (browser.fileName != null) {
+                    Text(browser.fileName, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                } else {
+                    val segments = remember(browser.directoryPath) {
+                        browser.directoryPath.split('/').filter { it.isNotEmpty() }
+                    }
+                    Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Text("Корень", Modifier.clickable { vm.loadDirectory("") },
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary)
+                        segments.forEachIndexed { index, segment ->
+                            Text(" / ", style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(segment,
+                                modifier = Modifier.clickable {
+                                    vm.loadDirectory(segments.take(index + 1).joinToString("/"))
+                                },
+                                style = MaterialTheme.typography.labelLarge,
+                                color = if (index == segments.lastIndex) MaterialTheme.colorScheme.onSurface
+                                else MaterialTheme.colorScheme.primary,
+                                maxLines = 1)
+                        }
+                    }
                 }
             }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         browser.error?.let {
             Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp))
         }
