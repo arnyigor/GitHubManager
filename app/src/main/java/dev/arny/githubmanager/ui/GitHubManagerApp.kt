@@ -89,9 +89,14 @@ fun GitHubManagerApp(state: AppState, vm: MainViewModel) {
             val browser = state.browser
             val canGoBrowserBack = state.detailTab == DetailTab.FILES &&
                 (browser.fileName != null || browser.directoryPath.isNotEmpty())
-            BackHandler(state.screen == Screen.DETAILS) {
-                if (canGoBrowserBack) vm.browserBack() else vm.backToRepos()
+            val goBack: () -> Unit = {
+                when {
+                    canGoBrowserBack -> vm.browserBack()
+                    state.detailTab != DetailTab.FILES -> vm.setDetailTab(DetailTab.FILES)
+                    else -> vm.backToRepos()
+                }
             }
+            BackHandler(state.screen == Screen.DETAILS) { goBack() }
             Scaffold(
                 containerColor = MaterialTheme.colorScheme.background,
                 topBar = {
@@ -99,15 +104,22 @@ fun GitHubManagerApp(state: AppState, vm: MainViewModel) {
                         title = {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Icon(Icons.Default.Code, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                                Text(if (state.screen == Screen.DETAILS) state.selected?.name ?: "Репозиторий" else "Репозитории",
-                                    maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold,
-                                    style = MaterialTheme.typography.titleMedium)
+                                Column {
+                                    Text(if (state.screen == Screen.DETAILS) state.selected?.name ?: "Репозиторий" else "Репозитории",
+                                        maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold,
+                                        style = MaterialTheme.typography.titleMedium)
+                                    if (state.screen == Screen.DETAILS && state.detailTab != DetailTab.FILES) {
+                                        Text(detailTabLabel(state.detailTab), maxLines = 1,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
                             }
                         },
                         navigationIcon = {
-                            if (state.screen == Screen.DETAILS) IconButton(onClick = {
-                                if (canGoBrowserBack) vm.browserBack() else vm.backToRepos()
-                            }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад") }
+                            if (state.screen == Screen.DETAILS) IconButton(onClick = goBack) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад")
+                            }
                         },
                         actions = {
                             if (state.screen == Screen.DETAILS) {
@@ -126,6 +138,18 @@ fun GitHubManagerApp(state: AppState, vm: MainViewModel) {
                                     Icon(Icons.Default.MoreVert, "Дополнительные действия")
                                 }
                                 DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                                    if (state.screen == Screen.DETAILS) {
+                                        listOf(DetailTab.FILES, DetailTab.RELEASES, DetailTab.OVERVIEW).forEach { tab ->
+                                            DropdownMenuItem(
+                                                text = { Text(detailTabLabel(tab)) },
+                                                trailingIcon = {
+                                                    if (state.detailTab == tab) Icon(Icons.Default.Check, null, Modifier.size(18.dp))
+                                                },
+                                                onClick = { showMenu = false; vm.setDetailTab(tab) }
+                                            )
+                                        }
+                                        HorizontalDivider()
+                                    }
                                     DropdownMenuItem(
                                         text = { Text(if (darkTheme) "Светлая тема" else "Тёмная тема") },
                                         leadingIcon = {
@@ -181,6 +205,12 @@ private fun shareRepository(context: Context, url: String) {
         putExtra(Intent.EXTRA_TEXT, url)
     }
     context.startActivity(Intent.createChooser(send, "Поделиться репозиторием"))
+}
+
+private fun detailTabLabel(tab: DetailTab): String = when (tab) {
+    DetailTab.FILES -> "Код"
+    DetailTab.RELEASES -> "Релизы"
+    DetailTab.OVERVIEW -> "Настройки"
 }
 
 @Composable
@@ -393,16 +423,7 @@ private fun DetailScreen(state: AppState, vm: MainViewModel) {
             pendingAsset = null
             if (uri != null && asset != null) vm.saveReleaseAsset(asset, uri, context.contentResolver)
         }
-        PrimaryTabRow(selectedTabIndex = when (state.detailTab) {
-            DetailTab.FILES -> 0; DetailTab.RELEASES -> 1; DetailTab.OVERVIEW -> 2
-        }, containerColor = MaterialTheme.colorScheme.surface) {
-            Tab(selected = state.detailTab == DetailTab.FILES, onClick = { vm.setDetailTab(DetailTab.FILES) },
-                text = { Text("Код") })
-            Tab(selected = state.detailTab == DetailTab.RELEASES, onClick = { vm.setDetailTab(DetailTab.RELEASES) },
-                text = { Text("Релизы") })
-            Tab(selected = state.detailTab == DetailTab.OVERVIEW, onClick = { vm.setDetailTab(DetailTab.OVERVIEW) },
-                text = { Text("Настройки") })
-        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         when (state.detailTab) {
             DetailTab.FILES -> FileBrowser(state.browser, vm)
             DetailTab.RELEASES -> ReleasesScreen(state.releases, state.download,
