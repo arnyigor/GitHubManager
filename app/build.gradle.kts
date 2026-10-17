@@ -50,6 +50,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.10.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("dev.hossain:compose-highlight:0.39.0")
+    implementation("com.caverock:androidsvg:1.4")
     implementation("com.mikepenz:multiplatform-markdown-renderer:0.39.2")
     implementation("com.mikepenz:multiplatform-markdown-renderer-m3:0.39.2")
 

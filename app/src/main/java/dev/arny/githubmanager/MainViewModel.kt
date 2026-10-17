@@ -18,6 +18,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+private const val MAX_FILE_BYTES = 2_000_000L
+
 enum class Screen { REPOSITORIES, DETAILS }
 enum class DetailTab { OVERVIEW, FILES, RELEASES }
 
@@ -26,6 +28,9 @@ data class BrowserState(
     val entries: List<GitHubContent> = emptyList(),
     val fileName: String? = null,
     val fileBody: String? = null,
+    val fileBytes: ByteArray? = null,
+    val fileKind: FilePreviewKind = FilePreviewKind.TEXT,
+    val fileSize: Long = 0,
     val fileUrl: String? = null,
     val loading: Boolean = false,
     val error: String? = null
@@ -251,7 +256,7 @@ class MainViewModel(
                             entries = result.entries.sortedWith(compareBy<GitHubContent> { it.type != "dir" }.thenBy { it.name.lowercase() })
                         ))
                     }
-                    is DirectoryResult.File -> showFile(result.file, path)
+                    is DirectoryResult.File -> showFile(active, selected.owner.login, selected.name, result.file, path)
                 }
             } catch (error: CancellationException) { throw error }
             catch (error: Exception) {
@@ -268,8 +273,8 @@ class MainViewModel(
         } else {
             val active = token ?: return
             val selected = mutable.value.selected ?: return
-            if (content.size > 200_000L) {
-                mutable.update { it.copy(browser = it.browser.copy(error = "Файл больше 200 КБ. Откройте его на GitHub.")) }
+            if (content.size > MAX_FILE_BYTES) {
+                mutable.update { it.copy(browser = it.browser.copy(error = "Файл больше ${MAX_FILE_BYTES / 1024 / 1024} МБ. Откройте его на GitHub.")) }
                 return
             }
             browserJob?.cancel()
@@ -277,7 +282,7 @@ class MainViewModel(
                 mutable.update { it.copy(browser = it.browser.copy(loading = true, error = null)) }
                 try {
                     when (val result = api.getContent(active, selected.owner.login, selected.name, content.path)) {
-                        is DirectoryResult.File -> showFile(result.file, content.path)
+                        is DirectoryResult.File -> showFile(active, selected.owner.login, selected.name, result.file, content.path)
                         is DirectoryResult.Directory -> loadDirectory(content.path)
                     }
                 } catch (error: CancellationException) { throw error }
@@ -288,20 +293,20 @@ class MainViewModel(
         }
     }
 
-    private fun showFile(file: GitHubContent, path: String) {
-        val text = when {
-            file.size > 200_000L -> "Файл больше 200 КБ. Просмотр ограничен."
-            file.encoding != "base64" || file.content == null -> "GitHub не вернул текстовое содержимое файла."
-            else -> try {
-                val decoded = Base64.decode(file.content, Base64.DEFAULT)
-                if (decoded.any { it == 0.toByte() }) "Двоичный файл. Откройте его на GitHub."
-                else decoded.toString(Charsets.UTF_8)
-            } catch (_: Exception) { "Содержимое файла не удалось декодировать." }
-        }
+    private suspend fun showFile(token: String, owner: String, repo: String, file: GitHubContent, path: String) {
+        val inline = runCatching {
+            if (file.encoding == "base64" && file.content != null) Base64.decode(file.content, Base64.DEFAULT) else null
+        }.getOrNull()
+        val bytes = inline ?: api.getRawContent(token, owner, repo, path, MAX_FILE_BYTES)
+        val kind = previewKindFor(file.name, bytes)
+        val text = if (kind == FilePreviewKind.TEXT || kind == FilePreviewKind.MARKDOWN) {
+            bytes.toString(Charsets.UTF_8)
+        } else null
         mutable.update {
             it.copy(browser = BrowserState(
                 directoryPath = path.substringBeforeLast('/', ""),
-                fileName = file.name, fileBody = text, fileUrl = file.htmlUrl
+                fileName = file.name, fileBody = text, fileBytes = bytes, fileKind = kind,
+                fileSize = file.size, fileUrl = file.htmlUrl
             ))
         }
     }
@@ -318,7 +323,7 @@ class MainViewModel(
                 mutable.update { it.copy(browser = it.browser.copy(loading = true, error = null)) }
                 try {
                     when (val result = api.getContent(active, selected.owner.login, selected.name, fullPath, forceRefresh = true)) {
-                        is DirectoryResult.File -> showFile(result.file, fullPath)
+                        is DirectoryResult.File -> showFile(active, selected.owner.login, selected.name, result.file, fullPath)
                         is DirectoryResult.Directory -> loadDirectory(fullPath, forceRefresh = true)
                     }
                 } catch (e: CancellationException) { throw e }

@@ -37,6 +37,8 @@ import androidx.compose.ui.unit.sp
 import dev.arny.githubmanager.*
 import dev.arny.githubmanager.domain.*
 import dev.arny.githubmanager.ui.code.CodeViewer
+import dev.arny.githubmanager.ui.file.BinaryViewer
+import dev.arny.githubmanager.ui.file.ImageViewer
 import dev.arny.githubmanager.ui.markdown.MarkdownViewer
 import dev.arny.githubmanager.domain.isMarkdownFile
 import dev.hossain.highlight.ui.HighlightThemeProvider
@@ -593,7 +595,18 @@ private fun ConfirmVisibilityDialog(repo: GitHubRepository, targetPrivate: Boole
 @Composable
 private fun FileContentPanel(browser: BrowserState) {
     val name = browser.fileName ?: return
-    val isMarkdown = isMarkdownFile(name)
+    when (browser.fileKind) {
+        FilePreviewKind.IMAGE, FilePreviewKind.VECTOR -> {
+            ImageViewer(name, browser.fileBytes ?: ByteArray(0), browser.fileKind, browser.fileUrl, browser.fileSize)
+            return
+        }
+        FilePreviewKind.BINARY -> {
+            BinaryViewer(name, browser.fileBytes ?: ByteArray(0), browser.fileUrl, browser.fileSize)
+            return
+        }
+        else -> Unit
+    }
+    val isMarkdown = browser.fileKind == FilePreviewKind.MARKDOWN
     var preview by remember(name, browser.directoryPath) { mutableStateOf(isMarkdown) }
     Column(Modifier.fillMaxSize()) {
         if (isMarkdown) {
@@ -732,7 +745,7 @@ private fun ReleaseCard(release: GitHubRelease, download: DownloadState?,
     }
 }
 
-private fun formatAssetSize(bytes: Long): String = when {
+internal fun formatAssetSize(bytes: Long): String = when {
     bytes >= 1024 * 1024 * 1024 -> "%.1f ГБ".format(java.util.Locale.US, bytes / (1024.0 * 1024 * 1024))
     bytes >= 1024 * 1024 -> "%.1f МБ".format(java.util.Locale.US, bytes / (1024.0 * 1024))
     bytes >= 1024 -> "%.1f КБ".format(java.util.Locale.US, bytes / 1024.0)

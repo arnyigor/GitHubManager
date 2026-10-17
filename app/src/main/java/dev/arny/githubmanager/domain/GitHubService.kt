@@ -11,6 +11,10 @@ interface GitHubService {
     suspend fun getRepository(token: String, owner: String, name: String, forceRefresh: Boolean = false): GitHubRepository
     suspend fun updateVisibility(token: String, owner: String, name: String, makePrivate: Boolean)
     suspend fun getContent(token: String, owner: String, name: String, path: String, forceRefresh: Boolean = false): DirectoryResult
+    /** Raw bytes of a repository file; used when the JSON `content` field is truncated or absent. */
+    suspend fun getRawContent(
+        token: String, owner: String, name: String, path: String, maxBytes: Long
+    ): ByteArray = throw UnsupportedOperationException("Raw content not available")
     suspend fun listReleases(token: String, owner: String, name: String, page: Int = 1, forceRefresh: Boolean = false): ReleasePage =
         throw UnsupportedOperationException("Releases not available")
     suspend fun downloadAsset(

@@ -129,6 +129,33 @@ class GitHubApi(context: Context) : GitHubService {
         } else DirectoryResult.File(json.decodeFromString(body))
     }
 
+    /** GitHub caps the JSON `content` field (1 MB), so bigger files are streamed through the raw media type. */
+    override suspend fun getRawContent(
+        token: String, owner: String, name: String, path: String, maxBytes: Long
+    ): ByteArray = withContext(Dispatchers.IO) {
+        val target = url(listOf("repos", owner, name, "contents") + path.split('/').filter { it.isNotBlank() })
+        val request = request(token, target, "application/vnd.github.raw").header("Cache-Control", "no-store")
+        client.newCall(request.build()).execute().use { response ->
+            if (!response.isSuccessful) throw failure(response.code)
+            val body = response.body ?: throw IOException("GitHub не вернул файл")
+            val tooBig = "Файл больше ${maxBytes / 1024 / 1024} МБ. Откройте его на GitHub."
+            if (body.contentLength() > maxBytes) throw IOException(tooBig)
+            val sink = java.io.ByteArrayOutputStream()
+            body.byteStream().use { stream ->
+                val buffer = ByteArray(64 * 1024)
+                var total = 0L
+                while (true) {
+                    val read = stream.read(buffer)
+                    if (read == -1) break
+                    total += read
+                    if (total > maxBytes) throw IOException(tooBig)
+                    sink.write(buffer, 0, read)
+                }
+            }
+            sink.toByteArray()
+        }
+    }
+
     override suspend fun listReleases(
         token: String, owner: String, name: String, page: Int, forceRefresh: Boolean
     ): ReleasePage {
