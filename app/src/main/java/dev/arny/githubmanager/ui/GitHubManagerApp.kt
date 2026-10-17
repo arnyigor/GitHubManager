@@ -151,9 +151,6 @@ fun GitHubManagerApp(state: AppState, vm: MainViewModel) {
                                         listOf(DetailTab.FILES, DetailTab.RELEASES, DetailTab.OVERVIEW).forEach { tab ->
                                             DropdownMenuItem(
                                                 text = { Text(detailTabLabel(tab)) },
-                                                trailingIcon = {
-                                                    if (state.detailTab == tab) Icon(Icons.Default.Check, null, Modifier.size(18.dp))
-                                                },
                                                 onClick = { showMenu = false; vm.setDetailTab(tab) }
                                             )
                                         }

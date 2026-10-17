@@ -231,13 +231,15 @@ class MainViewModel(
     }
 
     fun setDetailTab(tab: DetailTab) {
+        val browser = mutable.value.browser
         mutable.update { it.copy(detailTab = tab) }
         if (tab == DetailTab.RELEASES && mutable.value.releases.page == 0 && !mutable.value.releases.loading) {
             loadReleases(reset = true)
         }
-        if (tab == DetailTab.FILES && mutable.value.browser.entries.isEmpty() &&
-            mutable.value.browser.error == null && !mutable.value.browser.loading
-        ) loadDirectory("")
+        // Returning to «Код» must restore the open file or directory, not reset it to the repository root.
+        if (tab == DetailTab.FILES && browser.fileName == null && browser.entries.isEmpty() &&
+            browser.error == null && !browser.loading && mutable.value.browser.fileName == null
+        ) loadDirectory(browser.directoryPath)
     }
 
     fun loadDirectory(path: String, forceRefresh: Boolean = false) {
