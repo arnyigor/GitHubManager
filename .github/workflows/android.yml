@@ -15,7 +15,7 @@ jobs:
       - name: Install SDK packages
         run: sdkmanager 'platforms;android-37.0' 'build-tools;37.0.0'
       - name: Unit tests and debug APK
-        run: ./gradlew :app:testDebugUnitTest :app:assembleDebug --stacktrace
+        run: chmod +x gradlew && ./gradlew :app:testDebugUnitTest :app:assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
         with:
           name: github-manager-debug
