@@ -73,7 +73,12 @@ private val DayScheme = lightColorScheme(
 fun GitHubManagerApp(state: AppState, vm: MainViewModel) {
     val context = LocalContext.current
     val systemDark = isSystemInDarkTheme()
-    var darkTheme by rememberSaveable { mutableStateOf(systemDark) }
+    val uiPrefs = remember(context) {
+        context.applicationContext.getSharedPreferences("ui_prefs", Context.MODE_PRIVATE)
+    }
+    var darkTheme by rememberSaveable {
+        mutableStateOf(uiPrefs.getBoolean("dark_theme", systemDark))
+    }
     var showMenu by remember { mutableStateOf(false) }
     MaterialTheme(colorScheme = if (darkTheme) NightScheme else DayScheme) {
         HighlightThemeProvider(
@@ -111,27 +116,38 @@ fun GitHubManagerApp(state: AppState, vm: MainViewModel) {
                                     Icon(Icons.Default.Share, "Поделиться ссылкой на репозиторий")
                                 }
                             }
-                            IconButton(onClick = { darkTheme = !darkTheme }) {
-                                Icon(if (darkTheme) Icons.Default.LightMode else Icons.Default.DarkMode, "Переключить тему")
-                            }
                             if (state.hasSession) {
-                                IconButton(onClick = {
-                                    vm.refreshCurrent()
-                                }) { Icon(Icons.Default.Refresh, "Обновить с GitHub без кэша") }
-                                Box {
-                                    IconButton(onClick = { showMenu = true }) {
-                                        Icon(Icons.Default.MoreVert, "Опции кэша")
-                                    }
-                                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                                IconButton(onClick = vm::refreshCurrent) {
+                                    Icon(Icons.Default.Refresh, "Обновить с GitHub без кэша")
+                                }
+                            }
+                            Box {
+                                IconButton(onClick = { showMenu = true }) {
+                                    Icon(Icons.Default.MoreVert, "Дополнительные действия")
+                                }
+                                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                                    DropdownMenuItem(
+                                        text = { Text(if (darkTheme) "Светлая тема" else "Тёмная тема") },
+                                        leadingIcon = {
+                                            Icon(if (darkTheme) Icons.Default.LightMode else Icons.Default.DarkMode, null)
+                                        },
+                                        onClick = {
+                                            showMenu = false
+                                            darkTheme = !darkTheme
+                                            uiPrefs.edit().putBoolean("dark_theme", darkTheme).apply()
+                                        }
+                                    )
+                                    if (state.hasSession) {
                                         DropdownMenuItem(text = { Text("Очистить кэш и обновить") },
                                             onClick = { showMenu = false; vm.clearCacheAndRefresh() })
-                                        DropdownMenuItem(text = { Text("Обновить без кэша") },
-                                            onClick = { showMenu = false; vm.refreshCurrent() })
-                                    }
-                                }
-                                if (state.screen == Screen.REPOSITORIES) {
-                                    IconButton(onClick = vm::logout, enabled = !state.mutating) {
-                                        Icon(Icons.Default.Logout, "Выйти")
+                                        if (state.screen == Screen.REPOSITORIES) {
+                                            DropdownMenuItem(
+                                                text = { Text("Выйти из аккаунта") },
+                                                leadingIcon = { Icon(Icons.Default.Logout, null) },
+                                                enabled = !state.mutating,
+                                                onClick = { showMenu = false; vm.logout() }
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -202,7 +218,7 @@ private fun LoginScreen(busy: Boolean, login: (String) -> Unit) {
             shape = RoundedCornerShape(12.dp))
         Spacer(Modifier.height(12.dp))
         Button(enabled = !busy && pat.isNotBlank(), modifier = Modifier.fillMaxWidth().height(50.dp),
-            onClick = { val candidate = pat; pat = ""; login(candidate) }, shape = RoundedCornerShape(12.dp)) {
+            onClick = { login(pat) }, shape = RoundedCornerShape(12.dp)) {
             if (busy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
             else Text("Продолжить")
         }
@@ -481,6 +497,30 @@ private fun FileBrowser(browser: BrowserState, vm: MainViewModel) {
                 Icon(Icons.Default.Refresh, "Обновить папку")
             }
         }
+        if (browser.directoryPath.isNotEmpty()) {
+            val segments = remember(browser.directoryPath) {
+                browser.directoryPath.split('/').filter { it.isNotEmpty() }
+            }
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 18.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Корень", Modifier.clickable { vm.loadDirectory("") },
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary)
+                segments.forEachIndexed { index, segment ->
+                    Text(" / ", style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(segment,
+                        modifier = Modifier.clickable {
+                            vm.loadDirectory(segments.take(index + 1).joinToString("/"))
+                        },
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary)
+                }
+            }
+        }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         browser.error?.let {
             Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp))
@@ -488,6 +528,15 @@ private fun FileBrowser(browser: BrowserState, vm: MainViewModel) {
         when {
             browser.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             browser.fileName != null -> FileContentPanel(browser)
+            browser.entries.isEmpty() && browser.error != null -> Column(
+                Modifier.fillMaxSize().padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text("Не удалось загрузить каталог", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(10.dp))
+                OutlinedButton(onClick = vm::refreshBrowser) { Text("Повторить") }
+            }
             else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
                 if (browser.entries.isEmpty()) item {
                     EmptyPanel("Папка пуста", "В ней нет доступных файлов.")
@@ -591,11 +640,16 @@ private fun ReleasesScreen(
                 }
             }
         }
-        if (state.error != null) item { Text(state.error, color = MaterialTheme.colorScheme.error) }
+        if (state.error != null) item {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(state.error, color = MaterialTheme.colorScheme.error)
+                TextButton(onClick = refresh) { Text("Повторить запрос") }
+            }
+        }
         if (state.loading && state.entries.isEmpty()) item {
             Box(Modifier.fillMaxWidth().padding(28.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         }
-        if (!state.loading && state.entries.isEmpty()) item {
+        if (!state.loading && state.entries.isEmpty() && state.error == null) item {
             EmptyPanel("Релизов пока нет", "Репозиторий может содержать теги без опубликованных Releases.")
         }
         items(state.entries, key = { it.id }) { release ->
@@ -659,11 +713,15 @@ private fun ReleaseCard(release: GitHubRelease, download: DownloadState?,
                         }
                     }
                     if (download?.assetId == asset.id) {
-                        LinearProgressIndicator(
-                            progress = { if (download.total > 0) (download.bytes.toFloat() / download.total).coerceIn(0f, 1f) else 0f },
-                            modifier = Modifier.fillMaxWidth())
+                        if (download.total > 0) {
+                            LinearProgressIndicator(
+                                progress = { (download.bytes.toFloat() / download.total).coerceIn(0f, 1f) },
+                                modifier = Modifier.fillMaxWidth())
+                        } else {
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        }
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("${formatAssetSize(download.bytes)} / ${formatAssetSize(download.total)}",
+                            Text("${formatAssetSize(download.bytes)} / ${if (download.total > 0) formatAssetSize(download.total) else "размер неизвестен"}",
                                 modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelSmall)
                             TextButton(onClick = cancel) { Text("Отмена") }
                         }
