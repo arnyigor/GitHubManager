@@ -156,6 +156,43 @@ class GitHubApi(context: Context) : GitHubService {
         }
     }
 
+    override suspend fun getContentAtRef(
+        token: String, owner: String, name: String, path: String, ref: String, forceRefresh: Boolean
+    ): DirectoryResult {
+        val segments = listOf("repos", owner, name, "contents") + path.split('/').filter { it.isNotBlank() }
+        val body = call(token, segments, query = mapOf("ref" to ref), forceRefresh = forceRefresh)
+        return if (body.trimStart().startsWith("[")) {
+            DirectoryResult.Directory(json.decodeFromString(body))
+        } else DirectoryResult.File(json.decodeFromString(body))
+    }
+
+    override suspend fun getRawContentAtRef(
+        token: String, owner: String, name: String, path: String, ref: String, maxBytes: Long
+    ): ByteArray = withContext(Dispatchers.IO) {
+        val target = url(listOf("repos", owner, name, "contents") + path.split('/').filter { it.isNotBlank() },
+            query = mapOf("ref" to ref))
+        val request = request(token, target, "application/vnd.github.raw").header("Cache-Control", "no-store")
+        client.newCall(request.build()).execute().use { response ->
+            if (!response.isSuccessful) throw failure(response.code)
+            val body = response.body ?: throw IOException("GitHub не вернул файл")
+            val tooBig = "Файл больше ${maxBytes / 1024 / 1024} МБ. Откройте его на GitHub."
+            if (body.contentLength() > maxBytes) throw IOException(tooBig)
+            val sink = java.io.ByteArrayOutputStream()
+            body.byteStream().use { stream ->
+                val buffer = ByteArray(64 * 1024)
+                var total = 0L
+                while (true) {
+                    val read = stream.read(buffer)
+                    if (read == -1) break
+                    total += read
+                    if (total > maxBytes) throw IOException(tooBig)
+                    sink.write(buffer, 0, read)
+                }
+            }
+            sink.toByteArray()
+        }
+    }
+
     override suspend fun listReleases(
         token: String, owner: String, name: String, page: Int, forceRefresh: Boolean
     ): ReleasePage {

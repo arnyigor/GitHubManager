@@ -8,6 +8,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.arny.githubmanager.domain.*
 import dev.arny.githubmanager.security.SecureTokenStore
+import dev.arny.githubmanager.security.EncryptedDraftStore
+import dev.arny.githubmanager.remote.RemoteGitHubApi
+import dev.arny.githubmanager.remote.RemoteWorkspace
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.Job
@@ -21,7 +24,7 @@ import kotlinx.coroutines.withContext
 private const val MAX_FILE_BYTES = 2_000_000L
 
 enum class Screen { REPOSITORIES, DETAILS }
-enum class DetailTab { OVERVIEW, FILES, RELEASES }
+enum class DetailTab { OVERVIEW, FILES, CHANGES, RELEASES }
 
 data class BrowserState(
     val directoryPath: String = "",
@@ -66,9 +69,14 @@ data class AppState(
 
 class MainViewModel(
     private val api: GitHubService,
-    private val tokens: SecureTokenStore
+    private val tokens: SecureTokenStore,
+    private val drafts: EncryptedDraftStore,
+    private val remoteApi: RemoteGitHubApi
 ) : ViewModel() {
     private var token: String? = tokens.read()
+
+    val remote = RemoteWorkspace(remoteApi, drafts, { token }, viewModelScope,
+        onCommitted = { api.clearCache(); refreshBrowser() })
     private val manager = RepositoryManager(api)
     private var browserJob: Job? = null
     private var releaseJob: Job? = null
@@ -127,6 +135,7 @@ class MainViewModel(
     }
 
     fun logout() {
+        remote.logout()
         viewModelScope.coroutineContext.cancelChildren()
         browserJob = null
         releaseJob = null
@@ -154,7 +163,7 @@ class MainViewModel(
         when (mutable.value.detailTab) {
             DetailTab.FILES -> refreshBrowser()
             DetailTab.RELEASES -> loadReleases(reset = true, forceRefresh = true)
-            DetailTab.OVERVIEW -> Unit
+            DetailTab.OVERVIEW, DetailTab.CHANGES -> Unit
         }
     }
 
@@ -196,6 +205,7 @@ class MainViewModel(
         browserJob?.cancel()
         releaseJob?.cancel()
         val selected = mutable.value.repos.firstOrNull { it.id == repoId } ?: return
+        remote.open(selected)
         mutable.update {
             it.copy(
                 screen = Screen.DETAILS, selected = selected,
@@ -208,6 +218,7 @@ class MainViewModel(
     }
 
     fun backToRepos() {
+        remote.reset()
         browserJob?.cancel()
         releaseJob?.cancel()
         mutable.update { it.copy(screen = Screen.REPOSITORIES, selected = null, browser = BrowserState()) }
@@ -251,7 +262,7 @@ class MainViewModel(
                 it.copy(browser = BrowserState(directoryPath = path, loading = true))
             }
             try {
-                when (val result = api.getContent(active, selected.owner.login, selected.name, path, forceRefresh = forceRefresh)) {
+                when (val result = api.getContentAtRef(active, selected.owner.login, selected.name, path, remote.state.value.branch, forceRefresh = forceRefresh)) {
                     is DirectoryResult.Directory -> mutable.update {
                         it.copy(browser = BrowserState(
                             directoryPath = path,
@@ -283,7 +294,7 @@ class MainViewModel(
             browserJob = viewModelScope.launch {
                 mutable.update { it.copy(browser = it.browser.copy(loading = true, error = null)) }
                 try {
-                    when (val result = api.getContent(active, selected.owner.login, selected.name, content.path)) {
+                    when (val result = api.getContentAtRef(active, selected.owner.login, selected.name, content.path, remote.state.value.branch)) {
                         is DirectoryResult.File -> showFile(active, selected.owner.login, selected.name, result.file, content.path)
                         is DirectoryResult.Directory -> loadDirectory(content.path)
                     }
@@ -299,7 +310,7 @@ class MainViewModel(
         val inline = runCatching {
             if (file.encoding == "base64" && file.content != null) Base64.decode(file.content, Base64.DEFAULT) else null
         }.getOrNull()
-        val bytes = inline ?: api.getRawContent(token, owner, repo, path, MAX_FILE_BYTES)
+        val bytes = inline ?: api.getRawContentAtRef(token, owner, repo, path, remote.state.value.branch, MAX_FILE_BYTES)
         val kind = previewKindFor(file.name, bytes)
         val text = if (kind == FilePreviewKind.TEXT || kind == FilePreviewKind.MARKDOWN) {
             bytes.toString(Charsets.UTF_8)
@@ -324,7 +335,7 @@ class MainViewModel(
             browserJob = viewModelScope.launch {
                 mutable.update { it.copy(browser = it.browser.copy(loading = true, error = null)) }
                 try {
-                    when (val result = api.getContent(active, selected.owner.login, selected.name, fullPath, forceRefresh = true)) {
+                    when (val result = api.getContentAtRef(active, selected.owner.login, selected.name, fullPath, remote.state.value.branch, forceRefresh = true)) {
                         is DirectoryResult.File -> showFile(active, selected.owner.login, selected.name, result.file, fullPath)
                         is DirectoryResult.Directory -> loadDirectory(fullPath, forceRefresh = true)
                     }

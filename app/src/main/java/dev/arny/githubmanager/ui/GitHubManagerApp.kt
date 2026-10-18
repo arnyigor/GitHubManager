@@ -38,6 +38,8 @@ import dev.arny.githubmanager.*
 import dev.arny.githubmanager.domain.*
 import dev.arny.githubmanager.ui.code.CodeViewer
 import dev.arny.githubmanager.ui.file.BinaryViewer
+import dev.arny.githubmanager.ui.remote.RemoteChangesScreen
+import dev.arny.githubmanager.ui.remote.RemoteEditorScreen
 import dev.arny.githubmanager.ui.file.ImageViewer
 import dev.arny.githubmanager.ui.markdown.MarkdownViewer
 import dev.arny.githubmanager.domain.isMarkdownFile
@@ -82,6 +84,8 @@ fun GitHubManagerApp(state: AppState, vm: MainViewModel) {
         mutableStateOf(uiPrefs.getBoolean("dark_theme", systemDark))
     }
     var showMenu by remember { mutableStateOf(false) }
+    var showBranchDialog by remember { mutableStateOf(false) }
+    val remoteState by vm.remote.state.collectAsState()
     MaterialTheme(colorScheme = if (darkTheme) NightScheme else DayScheme) {
         HighlightThemeProvider(
             darkTheme = darkTheme,
@@ -93,6 +97,7 @@ fun GitHubManagerApp(state: AppState, vm: MainViewModel) {
                 (browser.fileName != null || browser.directoryPath.isNotEmpty())
             val goBack: () -> Unit = {
                 when {
+                    remoteState.editor != null -> vm.remote.saveDraft()
                     canGoBrowserBack -> vm.browserBack()
                     state.detailTab != DetailTab.FILES -> vm.setDetailTab(DetailTab.FILES)
                     else -> vm.backToRepos()
@@ -148,10 +153,37 @@ fun GitHubManagerApp(state: AppState, vm: MainViewModel) {
                                 }
                                 DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                                     if (state.screen == Screen.DETAILS) {
-                                        listOf(DetailTab.FILES, DetailTab.RELEASES, DetailTab.OVERVIEW).forEach { tab ->
+                                        listOf(DetailTab.FILES, DetailTab.CHANGES, DetailTab.RELEASES, DetailTab.OVERVIEW).forEach { tab ->
                                             DropdownMenuItem(
                                                 text = { Text(detailTabLabel(tab)) },
                                                 onClick = { showMenu = false; vm.setDetailTab(tab) }
+                                            )
+                                        }
+                                        HorizontalDivider()
+                                        DropdownMenuItem(
+                                            text = { Text("Ветка: ${remoteState.branch}") },
+                                            leadingIcon = { Icon(Icons.Default.AccountTree, null) },
+                                            enabled = !remoteState.busy && remoteState.editor == null,
+                                            onClick = { showMenu = false; showBranchDialog = true }
+                                        )
+                                        if (remoteState.editor == null) {
+                                            // Creating a file is useful from any section; editing needs an open file in «Код».
+                                            val openFile = if (state.detailTab == DetailTab.FILES) state.browser.fileName else null
+                                            DropdownMenuItem(
+                                                text = { Text(if (openFile == null) "Новый файл" else "Редактировать файл") },
+                                                leadingIcon = {
+                                                    Icon(if (openFile == null) Icons.Default.NoteAdd else Icons.Default.Edit, null)
+                                                },
+                                                enabled = !remoteState.busy,
+                                                onClick = {
+                                                    showMenu = false
+                                                    if (openFile == null) vm.remote.newFile(state.browser.directoryPath)
+                                                    else {
+                                                        val full = listOf(state.browser.directoryPath, openFile)
+                                                            .filter { it.isNotEmpty() }.joinToString("/")
+                                                        vm.remote.editFile(full)
+                                                    }
+                                                }
                                             )
                                         }
                                         HorizontalDivider()
@@ -188,6 +220,29 @@ fun GitHubManagerApp(state: AppState, vm: MainViewModel) {
                     )
                 }
             ) { padding ->
+                if (showBranchDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showBranchDialog = false },
+                        title = { Text("Ветка") },
+                        text = {
+                            Column(Modifier.verticalScroll(rememberScrollState())) {
+                                val names = remoteState.branches.ifEmpty {
+                                    listOf(remoteState.branch, state.selected?.defaultBranch ?: "main").distinct()
+                                }
+                                names.forEach { name ->
+                                    TextButton(
+                                        onClick = {
+                                            showBranchDialog = false
+                                            vm.remote.selectBranch(name) { vm.loadDirectory("") }
+                                        },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) { Text(name) }
+                                }
+                            }
+                        },
+                        confirmButton = { TextButton(onClick = { showBranchDialog = false }) { Text("Закрыть") } }
+                    )
+                }
                 Column(Modifier.fillMaxSize().padding(padding)) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     state.error?.let { MessageStrip(it, true, vm::dismissMessages) }
@@ -215,6 +270,7 @@ private fun shareRepository(context: Context, url: String) {
 
 private fun detailTabLabel(tab: DetailTab): String = when (tab) {
     DetailTab.FILES -> "Код"
+    DetailTab.CHANGES -> "Изменения"
     DetailTab.RELEASES -> "Релизы"
     DetailTab.OVERVIEW -> "Настройки"
 }
@@ -430,8 +486,11 @@ private fun DetailScreen(state: AppState, vm: MainViewModel) {
             if (uri != null && asset != null) vm.saveReleaseAsset(asset, uri, context.contentResolver)
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        val remote by vm.remote.state.collectAsState()
         when (state.detailTab) {
-            DetailTab.FILES -> FileBrowser(state.browser, vm)
+            DetailTab.FILES -> if (remote.editor != null) RemoteEditorScreen(remote, vm.remote)
+                else FileBrowser(state.browser, vm)
+            DetailTab.CHANGES -> RemoteChangesScreen(remote, vm.remote)
             DetailTab.RELEASES -> ReleasesScreen(state.releases, state.download,
                 refresh = { vm.loadReleases(reset = true, forceRefresh = true) },
                 more = { vm.loadReleases() },

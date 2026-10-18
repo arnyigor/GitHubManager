@@ -37,6 +37,7 @@ data class GitHubRepository(
     val language: String? = null,
     val fork: Boolean = false,
     val archived: Boolean = false,
+    @SerialName("default_branch") val defaultBranch: String = "main",
     val permissions: RepoPermissions? = null
 )
 

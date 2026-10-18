@@ -15,6 +15,13 @@ interface GitHubService {
     suspend fun getRawContent(
         token: String, owner: String, name: String, path: String, maxBytes: Long
     ): ByteArray = throw UnsupportedOperationException("Raw content not available")
+    suspend fun getContentAtRef(token: String, owner: String, name: String, path: String,
+        ref: String, forceRefresh: Boolean = false): DirectoryResult =
+        getContent(token, owner, name, path, forceRefresh)
+
+    suspend fun getRawContentAtRef(token: String, owner: String, name: String, path: String,
+        ref: String, maxBytes: Long): ByteArray = getRawContent(token, owner, name, path, maxBytes)
+
     suspend fun listReleases(token: String, owner: String, name: String, page: Int = 1, forceRefresh: Boolean = false): ReleasePage =
         throw UnsupportedOperationException("Releases not available")
     suspend fun downloadAsset(
