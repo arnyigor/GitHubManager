@@ -236,6 +236,23 @@ class GitHubApi(context: Context) : GitHubService {
         return ReleasePage(releases, hasNextPage(response.link, releases.size, 30), response.source)
     }
 
+    override suspend fun listCommits(
+        token: String, owner: String, name: String, ref: String, page: Int, forceRefresh: Boolean
+    ): CommitPage {
+        require(page > 0)
+        val response = call(token, listOf("repos", owner, name, "commits"),
+            query = mapOf("sha" to ref, "page" to page.toString(), "per_page" to "30"),
+            forceRefresh = forceRefresh)
+        val commits: List<GitHubCommit> = json.decodeFromString(response.body)
+        return CommitPage(commits, hasNextPage(response.link, commits.size, 30), response.source)
+    }
+
+    override suspend fun getCommit(
+        token: String, owner: String, name: String, sha: String, forceRefresh: Boolean
+    ): CommitDetails = json.decodeFromString(
+        callBody(token, listOf("repos", owner, name, "commits", sha), forceRefresh = forceRefresh)
+    )
+
     /** Only the initial api.github.com request contains the PAT. Signed CDN redirects get no token. */
     override suspend fun downloadAsset(
         token: String, owner: String, name: String, asset: GitHubReleaseAsset,

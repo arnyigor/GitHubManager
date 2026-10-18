@@ -154,7 +154,7 @@ fun GitHubManagerApp(state: AppState, vm: MainViewModel) {
                                 }
                                 DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                                     if (state.screen == Screen.DETAILS) {
-                                        listOf(DetailTab.FILES, DetailTab.CHANGES, DetailTab.RELEASES, DetailTab.OVERVIEW).forEach { tab ->
+                                        listOf(DetailTab.FILES, DetailTab.CHANGES, DetailTab.HISTORY, DetailTab.RELEASES, DetailTab.OVERVIEW).forEach { tab ->
                                             DropdownMenuItem(
                                                 text = { Text(detailTabLabel(tab)) },
                                                 onClick = { showMenu = false; vm.setDetailTab(tab) }
@@ -280,6 +280,7 @@ private fun shareRepository(context: Context, url: String) {
 private fun detailTabLabel(tab: DetailTab): String = when (tab) {
     DetailTab.FILES -> "Код"
     DetailTab.CHANGES -> "Изменения"
+    DetailTab.HISTORY -> "История"
     DetailTab.RELEASES -> "Релизы"
     DetailTab.OVERVIEW -> "Настройки"
 }
@@ -524,6 +525,10 @@ private fun DetailScreen(state: AppState, vm: MainViewModel) {
             DetailTab.FILES -> if (remote.editor != null) RemoteEditorScreen(remote, vm.remote)
                 else FileBrowser(state.browser, vm)
             DetailTab.CHANGES -> RemoteChangesScreen(remote, vm.remote)
+            DetailTab.HISTORY -> HistoryScreen(state.history,
+                refresh = { vm.loadHistory(reset = true, forceRefresh = true) },
+                more = { vm.loadHistory() },
+                toggle = vm::toggleCommit)
             DetailTab.RELEASES -> ReleasesScreen(state.releases, state.download,
                 refresh = { vm.loadReleases(reset = true, forceRefresh = true) },
                 more = { vm.loadReleases() },
@@ -727,6 +732,113 @@ private fun FileContentPanel(browser: BrowserState, markdownBase: MarkdownBase?)
         } else {
             CodeViewer(fileName = name, filePath = browser.directoryPath,
                 code = browser.fileBody.orEmpty(), url = browser.fileUrl, showPath = !isMarkdown)
+        }
+    }
+}
+
+@Composable
+private fun HistoryScreen(
+    history: HistoryState,
+    refresh: () -> Unit,
+    more: () -> Unit,
+    toggle: (String) -> Unit
+) {
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Text("История · ${history.entries.size}", style = MaterialTheme.typography.titleLarge)
+        Text("Коммиты выбранной ветки или тега. Нажмите на коммит, чтобы увидеть diff.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        Spacer(Modifier.height(10.dp))
+        history.error?.let {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(it, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall)
+                TextButton(onClick = refresh) { Text("Повторить") }
+            }
+        }
+        if (history.loading && history.entries.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            return@Column
+        }
+        if (!history.loading && history.entries.isEmpty() && history.error == null) {
+            Text("Коммитов нет", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            return@Column
+        }
+        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(history.entries, key = { it.sha }) { commit ->
+                Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+                    Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                        Row(Modifier.fillMaxWidth().clickable { toggle(commit.sha) },
+                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Column(Modifier.weight(1f)) {
+                                Text(commitTitle(commit.commit.message), maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium)
+                                Text("${commit.commit.author.name.ifEmpty { commit.author?.login ?: "—" }} · " +
+                                    "${commitDate(commit.commit.author.date)} · ${commit.sha.take(7)}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Icon(if (history.openSha == commit.sha) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                "Показать изменения коммита", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        if (history.openSha == commit.sha) {
+                            when {
+                                history.detailsLoading -> Row(verticalAlignment = Alignment.CenterVertically) {
+                                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Загружаю diff…", style = MaterialTheme.typography.labelSmall)
+                                }
+                                history.detailsError != null -> Text(history.detailsError,
+                                    color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
+                                history.details != null -> CommitFiles(history.details)
+                            }
+                        }
+                    }
+                }
+            }
+            if (history.hasMore) item {
+                OutlinedButton(onClick = more, enabled = !history.loading,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp), shape = RoundedCornerShape(10.dp)) {
+                    if (history.loading) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                    else Text("Загрузить ещё 30")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CommitFiles(details: CommitDetails) {
+    Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(commitStats(details.files), style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        details.files.forEach { file ->
+            // Each file gets its own box: a long patch must not look like the next file's header.
+            Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                Column(Modifier.fillMaxWidth().padding(8.dp)) {
+                    Text("${file.filename} · ${statusLabel(file.status)} · +${file.additions} −${file.deletions}",
+                        fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.labelSmall)
+                    val lines = patchLines(file.patch)
+                    if (lines.isEmpty()) {
+                        Text("diff недоступен (файл слишком большой или двоичный)",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        Column(Modifier.fillMaxWidth().heightIn(max = 240.dp).verticalScroll(rememberScrollState())) {
+                            lines.forEach { line ->
+                                Text(line, fontFamily = FontFamily.Monospace, fontSize = 11.sp,
+                                    color = when {
+                                        line.startsWith("+") -> Color(0xFF3EA873)
+                                        line.startsWith("-") -> Color(0xFFD76868)
+                                        line.startsWith("@@") -> MaterialTheme.colorScheme.primary
+                                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                    })
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

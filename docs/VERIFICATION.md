@@ -1,3 +1,23 @@
+# Code review (P2.1): история коммитов и diff коммита (2026-10-18)
+
+- `domain/Models.kt`: `GitHubCommit`, `CommitFile`, `CommitDetails`, `CommitPage` (+ `CacheSource`).
+- `GitHubService` / `GitHubApi`: `listCommits(ref, page)` — `?sha=<ref>&per_page=30`, пагинация по `Link`;
+  `getCommit(sha)` — diff файлов (`files[].patch`).
+- `domain/Commits.kt`: `commitTitle`, `commitDate`, `commitStats` (русские формы «1 файл / 3 файла / 5 файлов»),
+  `patchLines`, `statusLabel` — чистые функции под тестами.
+- `MainViewModel`: `DetailTab.HISTORY`, `HistoryState`, `loadHistory`, `toggleCommit` (свой `commitJob`,
+  чтобы раскрытие коммита не отменяло догрузку списка).
+- UI: раздел «История» в меню; строка коммита раскрывается, diff каждого файла — в отдельной плашке.
+
+Проверено на эмуляторе (Pixel_5) на `arnyigor/GitHubManager`: «История · 17», коммиты с автором/датой/SHA,
+раскрытие верхнего коммита показывает «8 файлов · +332 −15», заголовки файлов и патчи; строки заголовков хунков
+синие, добавленные строки зелёные. Скролл внутри патча ограничен 240dp.
+
+Не проверено: цвет удалённых строк отдельно не изолирован (используется та же ветка `when`, что и для добавленных),
+пагинация «Загрузить ещё 30» на репозитории с >30 коммитами, коммиты с merge-историей, бинарные файлы в diff.
+
+---
+
 # Markdown (P1.3): относительные ссылки, подсветка блоков кода (2026-10-18)
 
 - `ui/markdown/MarkdownLinks.kt`: `MarkdownBase(owner, repo, ref, directory)` + `resolveRelativeLinks`.

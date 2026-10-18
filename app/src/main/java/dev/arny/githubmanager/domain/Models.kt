@@ -93,6 +93,41 @@ data class GitHubReleaseAsset(
     val digest: String? = null
 )
 
+@Serializable
+data class CommitInfo(
+    val message: String = "",
+    val author: CommitAuthor = CommitAuthor()
+)
+
+@Serializable
+data class CommitAuthor(val name: String = "", val date: String? = null)
+
+@Serializable
+data class GitHubCommit(
+    val sha: String,
+    val commit: CommitInfo = CommitInfo(),
+    val author: RepoOwner? = null,
+    @SerialName("html_url") val htmlUrl: String? = null
+)
+
+@Serializable
+data class CommitFile(
+    val filename: String,
+    val status: String = "modified",
+    val additions: Int = 0,
+    val deletions: Int = 0,
+    val patch: String? = null
+)
+
+@Serializable
+data class CommitDetails(val files: List<CommitFile> = emptyList())
+
+data class CommitPage(
+    val entries: List<GitHubCommit>,
+    val hasMore: Boolean,
+    val source: CacheSource = CacheSource.NETWORK
+)
+
 data class ReleasePage(
     val entries: List<GitHubRelease>,
     val hasMore: Boolean,

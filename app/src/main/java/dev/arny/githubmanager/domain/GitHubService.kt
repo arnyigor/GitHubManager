@@ -22,6 +22,14 @@ interface GitHubService {
     suspend fun getRawContentAtRef(token: String, owner: String, name: String, path: String,
         ref: String, maxBytes: Long): ByteArray = getRawContent(token, owner, name, path, maxBytes)
 
+    suspend fun listCommits(token: String, owner: String, name: String, ref: String,
+        page: Int = 1, forceRefresh: Boolean = false): CommitPage =
+        throw UnsupportedOperationException("Commits not available")
+
+    suspend fun getCommit(token: String, owner: String, name: String, sha: String,
+        forceRefresh: Boolean = false): CommitDetails =
+        throw UnsupportedOperationException("Commit details not available")
+
     suspend fun listReleases(token: String, owner: String, name: String, page: Int = 1, forceRefresh: Boolean = false): ReleasePage =
         throw UnsupportedOperationException("Releases not available")
     suspend fun downloadAsset(

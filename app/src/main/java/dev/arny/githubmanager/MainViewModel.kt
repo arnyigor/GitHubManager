@@ -24,7 +24,7 @@ import kotlinx.coroutines.withContext
 private const val MAX_FILE_BYTES = 2_000_000L
 
 enum class Screen { REPOSITORIES, DETAILS }
-enum class DetailTab { OVERVIEW, FILES, CHANGES, RELEASES }
+enum class DetailTab { OVERVIEW, FILES, CHANGES, HISTORY, RELEASES }
 
 data class BrowserState(
     val directoryPath: String = "",
@@ -55,6 +55,7 @@ data class AppState(
     val detailTab: DetailTab = DetailTab.OVERVIEW,
     val browser: BrowserState = BrowserState(),
     val releases: ReleaseState = ReleaseState(),
+    val history: HistoryState = HistoryState(),
     val download: DownloadState? = null,
     val filter: VisibilityFilter = VisibilityFilter.ALL,
     val search: String = "",
@@ -66,6 +67,18 @@ data class AppState(
     val mutating: Boolean = false,
     val error: String? = null,
     val notice: String? = null
+)
+
+data class HistoryState(
+    val entries: List<GitHubCommit> = emptyList(),
+    val page: Int = 0,
+    val hasMore: Boolean = true,
+    val loading: Boolean = false,
+    val error: String? = null,
+    val openSha: String? = null,
+    val details: CommitDetails? = null,
+    val detailsLoading: Boolean = false,
+    val detailsError: String? = null
 )
 
 class MainViewModel(
@@ -81,6 +94,8 @@ class MainViewModel(
     private val manager = RepositoryManager(api)
     private var browserJob: Job? = null
     private var releaseJob: Job? = null
+    private var historyJob: Job? = null
+    private var commitJob: Job? = null
     private var downloadJob: Job? = null
     private val mutable = MutableStateFlow(AppState(hasSession = token != null))
     val state = mutable.asStateFlow()
@@ -140,6 +155,8 @@ class MainViewModel(
         viewModelScope.coroutineContext.cancelChildren()
         browserJob = null
         releaseJob = null
+        historyJob = null
+        commitJob = null
         downloadJob = null
         api.clearCache()
         tokens.clear() // Removes local credentials; the token must be revoked on github.com separately.
@@ -164,6 +181,7 @@ class MainViewModel(
         when (mutable.value.detailTab) {
             DetailTab.FILES -> refreshBrowser()
             DetailTab.RELEASES -> loadReleases(reset = true, forceRefresh = true)
+            DetailTab.HISTORY -> loadHistory(reset = true, forceRefresh = true)
             DetailTab.OVERVIEW, DetailTab.CHANGES -> Unit
         }
     }
@@ -212,6 +230,7 @@ class MainViewModel(
             it.copy(
                 screen = Screen.DETAILS, selected = selected,
                 detailTab = DetailTab.FILES, browser = BrowserState(), releases = ReleaseState(),
+                history = HistoryState(),
                 error = null, notice = null
             )
         }
@@ -248,6 +267,9 @@ class MainViewModel(
         mutable.update { it.copy(detailTab = tab) }
         if (tab == DetailTab.RELEASES && mutable.value.releases.page == 0 && !mutable.value.releases.loading) {
             loadReleases(reset = true)
+        }
+        if (tab == DetailTab.HISTORY && mutable.value.history.page == 0 && !mutable.value.history.loading) {
+            loadHistory(reset = true)
         }
         // Returning to «Код» must restore the open file or directory, not reset it to the repository root.
         if (tab == DetailTab.FILES && browser.fileName == null && browser.entries.isEmpty() &&
@@ -343,6 +365,61 @@ class MainViewModel(
                     }
                 } catch (e: CancellationException) { throw e }
                 catch (e: Exception) { mutable.update { it.copy(browser = it.browser.copy(loading = false, error = safeMessage(e))) } }
+            }
+        }
+    }
+
+    fun loadHistory(reset: Boolean = false, forceRefresh: Boolean = false) {
+        val active = token ?: return
+        val repo = mutable.value.selected ?: return
+        if (mutable.value.history.loading && !(reset && forceRefresh)) return
+        historyJob?.cancel()
+        historyJob = viewModelScope.launch {
+            val page = if (reset) 1 else mutable.value.history.page + 1
+            mutable.update { it.copy(history = it.history.copy(loading = true, error = null)) }
+            try {
+                val result = api.listCommits(active, repo.owner.login, repo.name,
+                    remote.state.value.branch, page, forceRefresh)
+                mutable.update { old ->
+                    if (old.selected?.id != repo.id) old else old.copy(history = old.history.copy(
+                        entries = if (reset) result.entries else
+                            (old.history.entries + result.entries).distinctBy { it.sha },
+                        page = page, hasMore = result.hasMore, loading = false))
+                }
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                mutable.update { it.copy(history = it.history.copy(loading = false, error = safeMessage(e))) }
+            }
+        }
+    }
+
+    /** Loads the patch of one commit; tapping the same commit again collapses it. */
+    fun toggleCommit(sha: String) {
+        val active = token ?: return
+        val repo = mutable.value.selected ?: return
+        val history = mutable.value.history
+        if (history.openSha == sha) {
+            mutable.update { it.copy(history = it.history.copy(openSha = null, details = null, detailsError = null)) }
+            return
+        }
+        mutable.update {
+            it.copy(history = it.history.copy(openSha = sha, details = null, detailsError = null, detailsLoading = true))
+        }
+        // Separate job: expanding a commit must not cancel a page load, and vice versa.
+        commitJob?.cancel()
+        commitJob = viewModelScope.launch {
+            try {
+                val details = api.getCommit(active, repo.owner.login, repo.name, sha)
+                mutable.update { old ->
+                    if (old.history.openSha != sha) old
+                    else old.copy(history = old.history.copy(details = details, detailsLoading = false))
+                }
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                mutable.update { old ->
+                    if (old.history.openSha != sha) old
+                    else old.copy(history = old.history.copy(detailsLoading = false, detailsError = safeMessage(e)))
+                }
             }
         }
     }
