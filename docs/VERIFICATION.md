@@ -1,3 +1,26 @@
+# Markdown (P1.3): относительные ссылки, подсветка блоков кода (2026-10-18)
+
+- `ui/markdown/MarkdownLinks.kt`: `MarkdownBase(owner, repo, ref, directory)` + `resolveRelativeLinks`.
+  Относительные цели переписываются в `github.com/.../blob/<ref>/<path>` (ссылки) и
+  `raw.githubusercontent.com/.../<ref>/<path>` (картинки); `./`, `../` нормализуются,
+  выход за корень репозитория отбрасывается, внешние URL, `mailto:` и якоря не трогаются.
+- `ui/markdown/CodeHighlight.kt`: `codeTokens(code, language)` — комментарии, строки, ключевые слова;
+  строки и комментарии имеют приоритет над ключевыми словами.
+- `ui/markdown/HighlightedCodeFence.kt`: подсветка блока кода. Аннотатор библиотеки до `CODE_FENCE` не доходит —
+  блоки рендерит отдельный компонент, поэтому подключён `markdownComponents(codeFence = …)`;
+  текст блока берётся по `node.startOffset/endOffset`, а не из `model.content` (там весь документ).
+- `MarkdownViewer` принимает `base` и подставляет его из `FileBrowser` (owner/repo/ref/каталог файла).
+
+Проверено на эмуляторе (Pixel_5), README тестового репозитория с блоком ```kotlin и относительной ссылкой:
+блок отрисован один раз, ключевые слова синие, строка зелёная, комментарий серый; ссылка «notes» подчёркнута,
+тап открывает Chrome на `https://github.com/...` (в logcat URL усечён как `https://github.com/...`).
+Точные адреса проверены unit-тестами `MarkdownLinksTest` (7 тестов) и `CodeHighlightTest` (5 тестов).
+
+Не проверено: картинки в Markdown не загружаются (Coil в проект не добавлен намеренно), якорные ссылки
+и reference-style ссылки не переписываются (переносятся как есть), подсветка внутри вложенных списков.
+
+---
+
 # Developer browser (P1.2): теги как ref, настройки просмотра кода (2026-10-18)
 
 - Диалог ref переименован в «Ветка или тег»: `RemoteGitHubApi.tags()` (+ `RemoteState.tags`), выбор тега идёт тем же

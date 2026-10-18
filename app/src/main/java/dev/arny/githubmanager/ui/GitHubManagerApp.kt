@@ -41,6 +41,7 @@ import dev.arny.githubmanager.ui.file.BinaryViewer
 import dev.arny.githubmanager.ui.remote.RemoteChangesScreen
 import dev.arny.githubmanager.ui.remote.RemoteEditorScreen
 import dev.arny.githubmanager.ui.file.ImageViewer
+import dev.arny.githubmanager.ui.markdown.MarkdownBase
 import dev.arny.githubmanager.ui.markdown.MarkdownViewer
 import dev.arny.githubmanager.domain.isMarkdownFile
 import dev.hossain.highlight.ui.HighlightThemeProvider
@@ -586,6 +587,11 @@ private fun SettingsScreen(repo: GitHubRepository, mutating: Boolean, onChange: 
 
 @Composable
 private fun FileBrowser(browser: BrowserState, vm: MainViewModel) {
+    val selected = vm.state.collectAsState().value.selected
+    val ref = vm.remote.state.collectAsState().value.branch
+    val markdownBase = selected?.let {
+        MarkdownBase(it.owner.login, it.name, ref, browser.directoryPath)
+    }
     Column(Modifier.fillMaxSize()) {
         // Back navigation for files lives in the app bar; breadcrumbs only for directories.
         if (browser.fileName == null && browser.directoryPath.isNotEmpty()) {
@@ -621,7 +627,7 @@ private fun FileBrowser(browser: BrowserState, vm: MainViewModel) {
         }
         when {
             browser.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            browser.fileName != null -> FileContentPanel(browser)
+            browser.fileName != null -> FileContentPanel(browser, markdownBase)
             browser.entries.isEmpty() && browser.error != null -> Column(
                 Modifier.fillMaxSize().padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -688,7 +694,7 @@ private fun ConfirmVisibilityDialog(repo: GitHubRepository, targetPrivate: Boole
 
 
 @Composable
-private fun FileContentPanel(browser: BrowserState) {
+private fun FileContentPanel(browser: BrowserState, markdownBase: MarkdownBase?) {
     val name = browser.fileName ?: return
     when (browser.fileKind) {
         FilePreviewKind.IMAGE, FilePreviewKind.VECTOR -> {
@@ -717,7 +723,7 @@ private fun FileContentPanel(browser: BrowserState) {
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         }
         if (isMarkdown && preview) {
-            MarkdownViewer(browser.fileBody.orEmpty(), modifier = Modifier.fillMaxSize())
+            MarkdownViewer(browser.fileBody.orEmpty(), modifier = Modifier.fillMaxSize(), base = markdownBase)
         } else {
             CodeViewer(fileName = name, filePath = browser.directoryPath,
                 code = browser.fileBody.orEmpty(), url = browser.fileUrl, showPath = !isMarkdown)
