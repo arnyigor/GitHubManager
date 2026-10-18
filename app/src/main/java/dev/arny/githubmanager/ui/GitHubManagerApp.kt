@@ -223,20 +223,28 @@ fun GitHubManagerApp(state: AppState, vm: MainViewModel) {
                 if (showBranchDialog) {
                     AlertDialog(
                         onDismissRequest = { showBranchDialog = false },
-                        title = { Text("Ветка") },
+                        title = { Text("Ветка или тег") },
                         text = {
                             Column(Modifier.verticalScroll(rememberScrollState())) {
                                 val names = remoteState.branches.ifEmpty {
                                     listOf(remoteState.branch, state.selected?.defaultBranch ?: "main").distinct()
                                 }
                                 names.forEach { name ->
-                                    TextButton(
-                                        onClick = {
+                                    RefButton(name, name == remoteState.branch) {
+                                        showBranchDialog = false
+                                        vm.remote.selectBranch(name) { vm.loadDirectory("") }
+                                    }
+                                }
+                                if (remoteState.tags.isNotEmpty()) {
+                                    HorizontalDivider(Modifier.padding(vertical = 6.dp))
+                                    Text("Теги", style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    remoteState.tags.forEach { name ->
+                                        RefButton(name, name == remoteState.branch) {
                                             showBranchDialog = false
                                             vm.remote.selectBranch(name) { vm.loadDirectory("") }
-                                        },
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) { Text(name) }
+                                        }
+                                    }
                                 }
                             }
                         },
@@ -334,6 +342,18 @@ private fun ReconnectionScreen(loading: Boolean, retry: () -> Unit, logout: () -
             Spacer(Modifier.height(12.dp))
             Button(onClick = retry) { Text("Повторить") }
             TextButton(onClick = logout) { Text("Сменить токен") }
+        }
+    }
+}
+
+/** One selectable ref (branch or tag) in the ref dialog; the current one is marked. */
+@Composable
+private fun RefButton(name: String, selected: Boolean, onClick: () -> Unit) {
+    TextButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+        Text(name, fontWeight = if (selected) androidx.compose.ui.text.font.FontWeight.SemiBold else null)
+        if (selected) {
+            Spacer(Modifier.size(6.dp))
+            Icon(Icons.Default.Check, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
         }
     }
 }

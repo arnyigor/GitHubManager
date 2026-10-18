@@ -59,6 +59,11 @@ class RemoteGitHubApi {
         return arr.map { it.jsonObject.getValue("name").jsonPrimitive.content }
     }
 
+    suspend fun tags(token: String, owner: String, repo: String): List<String> {
+        val arr = request(token, base(owner, repo) + "tags", query = mapOf("per_page" to "100")).jsonArray
+        return arr.map { it.jsonObject.getValue("name").jsonPrimitive.content }
+    }
+
     suspend fun head(token: String, owner: String, repo: String, branch: String): String =
         request(token, branchParts(owner, repo, branch, false)).jsonObject
             .getValue("object").jsonObject.getValue("sha").jsonPrimitive.content

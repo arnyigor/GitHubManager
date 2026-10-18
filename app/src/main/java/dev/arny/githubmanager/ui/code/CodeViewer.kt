@@ -44,6 +44,9 @@ fun CodeViewer(fileName: String, filePath: String, code: String, url: String?, s
     }
     val pages = remember(code) { codePages(code) }
     var pageIndex by rememberSaveable(fullPath) { mutableIntStateOf(0) }
+    // Viewer preferences survive rotation and page changes; long minified lines are unreadable with wrap off.
+    var wrapLines by rememberSaveable { mutableStateOf(false) }
+    var fontSize by rememberSaveable { mutableIntStateOf(12) }
     val safePageIndex = pageIndex.coerceIn(0, pages.lastIndex)
     val current = pages[safePageIndex]
     val text = remember(code, safePageIndex) { current.text }
@@ -55,23 +58,34 @@ fun CodeViewer(fileName: String, filePath: String, code: String, url: String?, s
     val display = if (enableHighlight) highlighted ?: AnnotatedString(text) else AnnotatedString(text)
 
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Column(Modifier.weight(1f)) {
-                if (showPath) Text(fullPath, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.labelMedium)
-                Text("$language · ${code.length} символов · ${pages.last().lastLine} строк",
-                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            IconButton(onClick = { clipboard.setText(AnnotatedString(fullPath)) }) {
-                Icon(Icons.Default.ContentCopy, "Копировать путь")
-            }
-            IconButton(onClick = { clipboard.setText(AnnotatedString(code)) }) {
-                Icon(Icons.Default.FileCopy, "Копировать весь код")
-            }
-            if (url?.startsWith("https://github.com/") == true) {
-                IconButton(onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }) {
-                    Icon(Icons.Default.OpenInBrowser, "Открыть на GitHub")
+        // Two rows: the file stats must not be squeezed by the action buttons on a phone width.
+        Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 8.dp, top = 6.dp)) {
+            if (showPath) Text(fullPath, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.labelMedium)
+            Text("$language · ${code.length} символов · ${pages.last().lastLine} строк",
+                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { wrapLines = !wrapLines }) {
+                    Icon(Icons.Default.WrapText, if (wrapLines) "Отключить перенос строк" else "Переносить строки",
+                        tint = if (wrapLines) MaterialTheme.colorScheme.primary else LocalContentColor.current)
+                }
+                IconButton(onClick = { fontSize = (fontSize + 2).coerceAtMost(22) }, enabled = fontSize < 22) {
+                    Icon(Icons.Default.FormatSize, "Крупнее шрифт ($fontSize)")
+                }
+                IconButton(onClick = { fontSize = (fontSize - 2).coerceAtLeast(10) }, enabled = fontSize > 10) {
+                    Icon(Icons.Default.TextDecrease, "Мельче шрифт ($fontSize)")
+                }
+                Spacer(Modifier.weight(1f))
+                IconButton(onClick = { clipboard.setText(AnnotatedString(fullPath)) }) {
+                    Icon(Icons.Default.ContentCopy, "Копировать путь")
+                }
+                IconButton(onClick = { clipboard.setText(AnnotatedString(code)) }) {
+                    Icon(Icons.Default.FileCopy, "Копировать весь код")
+                }
+                if (url?.startsWith("https://github.com/") == true) {
+                    IconButton(onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }) {
+                        Icon(Icons.Default.OpenInBrowser, "Открыть на GitHub")
+                    }
                 }
             }
         }
@@ -100,7 +114,7 @@ fun CodeViewer(fileName: String, filePath: String, code: String, url: String?, s
         // The gutter is independent of horizontal scrolling, so line numbers remain visible.
         Row(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(vertical = 10.dp)) {
             val codeStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace,
-                fontSize = 12.sp, lineHeight = 19.sp)
+                fontSize = fontSize.sp, lineHeight = (fontSize + 7).sp)
             Text(
                 text = (current.firstLine..current.lastLine).joinToString("\n"),
                 modifier = Modifier.padding(start = 10.dp, end = 12.dp),
@@ -109,9 +123,10 @@ fun CodeViewer(fileName: String, filePath: String, code: String, url: String?, s
             )
             Box(Modifier.weight(1f)) {
                 SelectionContainer {
-                    Box(Modifier.horizontalScroll(rememberScrollState())) {
+                    val scroller = rememberScrollState()
+                    Box(if (wrapLines) Modifier else Modifier.horizontalScroll(scroller)) {
                         Text(display, modifier = Modifier.padding(end = 18.dp), style = codeStyle,
-                            softWrap = false, color = MaterialTheme.colorScheme.onSurface)
+                            softWrap = wrapLines, color = MaterialTheme.colorScheme.onSurface)
                     }
                 }
             }

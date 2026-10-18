@@ -17,6 +17,7 @@ import kotlinx.coroutines.launch
 data class RemoteState(
     val branch: String = "main",
     val branches: List<String> = emptyList(),
+    val tags: List<String> = emptyList(),
     val editor: EditBuffer? = null,
     val changes: List<RemoteChange> = emptyList(),
     val busy: Boolean = false,
@@ -48,6 +49,8 @@ class RemoteWorkspace(
                 val tok = tokenProvider() ?: return@launch
                 val names = remote.branches(tok, selected.owner.login, selected.name)
                 if (repo?.id == id) mutable.update { it.copy(branches = names) }
+                val tags = runCatching { remote.tags(tok, selected.owner.login, selected.name) }.getOrDefault(emptyList())
+                if (repo?.id == id) mutable.update { it.copy(tags = tags) }
             } catch (_: Exception) { /* branch listing is auxiliary; default remains available */ }
         }
     }
@@ -79,11 +82,11 @@ class RemoteWorkspace(
 
     fun selectBranch(branch: String, onSelected: () -> Unit) {
         if (mutable.value.busy || mutable.value.editor != null) return
-        if (branch !in mutable.value.branches && branch != repo?.defaultBranch) return
+        if (branch !in mutable.value.branches && branch !in mutable.value.tags && branch != repo?.defaultBranch) return
         editorSave?.cancel()
         val saved = loadBundle(branch)
         mutable.value = RemoteState(branch = branch, branches = mutable.value.branches,
-            changes = saved.changes, editor = saved.editor)
+            tags = mutable.value.tags, changes = saved.changes, editor = saved.editor)
         onSelected()
     }
 
