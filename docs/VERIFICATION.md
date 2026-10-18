@@ -1,3 +1,21 @@
+# Actions (P2.3, read-only) — 2026-10-19
+
+- `domain/Models.kt`: `GitHubWorkflowRun`, `WorkflowRunsResponse`, `RunPage`.
+- `GitHubApi.listWorkflowRuns(page)` — `/actions/runs?per_page=30`, пагинация по `Link`.
+- `domain/Runs.kt`: `runStatusLabel` (учитывает `conclusion`, а при `null` — `status`), `runTitle`, `runMeta`, `runKind`.
+- `MainViewModel`: `DetailTab.ACTIONS`, `RunsState`, `loadRuns` (свой `runsJob`).
+- UI: раздел «Actions» в меню, иконка по результату, `OnClick` открывает запуск на GitHub.
+
+Проверено на эмуляторе на `arnyigor/GitHubManager`: «Actions · 23», строки `Успешно · Android CI #23 · main · push · 2026-10-18`,
+зелёные галочки; нажатие открыло Chrome (`ACTION_VIEW` на `https://github.com/...`).
+Проверено unit-тестами `RunsParsingTest` (4): реальный ответ `/actions/runs`, различие `status`/`conclusion`,
+`failure`/`timed_out`/`cancelled`, fallback заголовка на имя workflow.
+
+Не проверено: «Загрузить ещё 30», запуски в состоянии `queued`, скачивание артефактов и логи в приложении
+(только переход на GitHub), фильтры по ветке/статусу.
+
+---
+
 # Issues (P2.2, read-only) — 2026-10-19
 
 - `domain/Models.kt`: `GitHubIssue` (+ `pull_request` как `JsonElement?`, чтобы отличить PR), `GitHubLabel`, `IssuePage`.

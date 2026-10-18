@@ -34,6 +34,10 @@ interface GitHubService {
         page: Int = 1, forceRefresh: Boolean = false): IssuePage =
         throw UnsupportedOperationException("Issues not available")
 
+    suspend fun listWorkflowRuns(token: String, owner: String, name: String,
+        page: Int = 1, forceRefresh: Boolean = false): RunPage =
+        throw UnsupportedOperationException("Actions not available")
+
     suspend fun listReleases(token: String, owner: String, name: String, page: Int = 1, forceRefresh: Boolean = false): ReleasePage =
         throw UnsupportedOperationException("Releases not available")
     suspend fun downloadAsset(

@@ -141,6 +141,33 @@ data class GitHubIssue(
     @SerialName("pull_request") val pullRequest: kotlinx.serialization.json.JsonElement? = null
 )
 
+@Serializable
+data class GitHubWorkflowRun(
+    val id: Long,
+    val name: String? = null,
+    @SerialName("display_title") val displayTitle: String? = null,
+    val status: String = "queued",
+    val conclusion: String? = null,
+    @SerialName("head_branch") val headBranch: String? = null,
+    val event: String? = null,
+    @SerialName("run_number") val runNumber: Int = 0,
+    @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("updated_at") val updatedAt: String? = null,
+    @SerialName("html_url") val htmlUrl: String? = null
+)
+
+@Serializable
+data class WorkflowRunsResponse(
+    @SerialName("total_count") val totalCount: Int = 0,
+    @SerialName("workflow_runs") val workflowRuns: List<GitHubWorkflowRun> = emptyList()
+)
+
+data class RunPage(
+    val entries: List<GitHubWorkflowRun>,
+    val hasMore: Boolean,
+    val source: CacheSource = CacheSource.NETWORK
+)
+
 data class IssuePage(
     val entries: List<GitHubIssue>,
     val hasMore: Boolean,

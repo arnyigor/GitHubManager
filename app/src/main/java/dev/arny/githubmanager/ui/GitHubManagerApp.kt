@@ -154,7 +154,7 @@ fun GitHubManagerApp(state: AppState, vm: MainViewModel) {
                                 }
                                 DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                                     if (state.screen == Screen.DETAILS) {
-                                        listOf(DetailTab.FILES, DetailTab.CHANGES, DetailTab.HISTORY, DetailTab.ISSUES, DetailTab.RELEASES, DetailTab.OVERVIEW).forEach { tab ->
+                                        listOf(DetailTab.FILES, DetailTab.CHANGES, DetailTab.HISTORY, DetailTab.ISSUES, DetailTab.RELEASES, DetailTab.ACTIONS, DetailTab.OVERVIEW).forEach { tab ->
                                             DropdownMenuItem(
                                                 text = { Text(detailTabLabel(tab)) },
                                                 onClick = { showMenu = false; vm.setDetailTab(tab) }
@@ -282,6 +282,7 @@ private fun detailTabLabel(tab: DetailTab): String = when (tab) {
     DetailTab.CHANGES -> "Изменения"
     DetailTab.HISTORY -> "История"
     DetailTab.ISSUES -> "Issues"
+    DetailTab.ACTIONS -> "Actions"
     DetailTab.RELEASES -> "Релизы"
     DetailTab.OVERVIEW -> "Настройки"
 }
@@ -526,6 +527,9 @@ private fun DetailScreen(state: AppState, vm: MainViewModel) {
             DetailTab.FILES -> if (remote.editor != null) RemoteEditorScreen(remote, vm.remote)
                 else FileBrowser(state.browser, vm)
             DetailTab.CHANGES -> RemoteChangesScreen(remote, vm.remote)
+            DetailTab.ACTIONS -> RunsScreen(state.runs,
+                refresh = { vm.loadRuns(reset = true, forceRefresh = true) },
+                more = { vm.loadRuns() })
             DetailTab.ISSUES -> IssuesScreen(state.issues,
                 refresh = { vm.loadIssues(reset = true, forceRefresh = true) },
                 more = { vm.loadIssues() },
@@ -738,6 +742,81 @@ private fun FileContentPanel(browser: BrowserState, markdownBase: MarkdownBase?)
         } else {
             CodeViewer(fileName = name, filePath = browser.directoryPath,
                 code = browser.fileBody.orEmpty(), url = browser.fileUrl, showPath = !isMarkdown)
+        }
+    }
+}
+
+@Composable
+private fun RunsScreen(runs: RunsState, refresh: () -> Unit, more: () -> Unit) {
+    val context = LocalContext.current
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Text("Actions · ${runs.entries.size}", style = MaterialTheme.typography.titleLarge)
+        Text("Последние запуски workflow. Нажмите на запуск, чтобы открыть его на GitHub.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        Spacer(Modifier.height(10.dp))
+        runs.error?.let {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(it, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall)
+                TextButton(onClick = refresh) { Text("Повторить") }
+            }
+        }
+        if (runs.loading && runs.entries.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            return@Column
+        }
+        if (!runs.loading && runs.entries.isEmpty() && runs.error == null) {
+            Text("Запусков workflow нет", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            return@Column
+        }
+        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(runs.entries, key = { it.id }) { run ->
+                val url = run.htmlUrl
+                val kind = runKind(run)
+                val color = when (kind) {
+                    RunKind.SUCCESS -> Color(0xFF3EA873)
+                    RunKind.FAILURE -> Color(0xFFD76868)
+                    RunKind.PENDING -> MaterialTheme.colorScheme.primary
+                    RunKind.MUTED -> MaterialTheme.colorScheme.onSurfaceVariant
+                }
+                Surface(
+                    onClick = {
+                        if (url != null && url.startsWith("https://github.com/"))
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                    },
+                    shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Row(Modifier.fillMaxWidth().padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Icon(
+                            when (kind) {
+                                RunKind.SUCCESS -> Icons.Default.CheckCircle
+                                RunKind.FAILURE -> Icons.Default.Cancel
+                                RunKind.PENDING -> Icons.Default.Schedule
+                                RunKind.MUTED -> Icons.Default.RemoveCircleOutline
+                            },
+                            runStatusLabel(run), tint = color, modifier = Modifier.size(20.dp)
+                        )
+                        Column(Modifier.weight(1f)) {
+                            Text(runTitle(run), maxLines = 2, overflow = TextOverflow.Ellipsis,
+                                style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                            Text("${runStatusLabel(run)} · ${runMeta(run)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Icon(Icons.Default.OpenInBrowser, "Открыть на GitHub",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                    }
+                }
+            }
+            if (runs.hasMore) item {
+                OutlinedButton(onClick = more, enabled = !runs.loading,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp), shape = RoundedCornerShape(10.dp)) {
+                    if (runs.loading) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                    else Text("Загрузить ещё 30")
+                }
+            }
         }
     }
 }

@@ -267,6 +267,17 @@ class GitHubApi(context: Context) : GitHubService {
         return IssuePage(issues, hasNextPage(response.link, all.size, 30), response.source)
     }
 
+    override suspend fun listWorkflowRuns(
+        token: String, owner: String, name: String, page: Int, forceRefresh: Boolean
+    ): RunPage {
+        require(page > 0)
+        val response = call(token, listOf("repos", owner, name, "actions", "runs"),
+            query = mapOf("page" to page.toString(), "per_page" to "30"), forceRefresh = forceRefresh)
+        val parsed: WorkflowRunsResponse = json.decodeFromString(response.body)
+        val runs = parsed.workflowRuns
+        return RunPage(runs, hasNextPage(response.link, runs.size, 30), response.source)
+    }
+
     /** Only the initial api.github.com request contains the PAT. Signed CDN redirects get no token. */
     override suspend fun downloadAsset(
         token: String, owner: String, name: String, asset: GitHubReleaseAsset,

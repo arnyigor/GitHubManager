@@ -24,7 +24,7 @@ import kotlinx.coroutines.withContext
 private const val MAX_FILE_BYTES = 2_000_000L
 
 enum class Screen { REPOSITORIES, DETAILS }
-enum class DetailTab { OVERVIEW, FILES, CHANGES, HISTORY, ISSUES, RELEASES }
+enum class DetailTab { OVERVIEW, FILES, CHANGES, HISTORY, ISSUES, RELEASES, ACTIONS }
 
 data class BrowserState(
     val directoryPath: String = "",
@@ -57,6 +57,7 @@ data class AppState(
     val releases: ReleaseState = ReleaseState(),
     val history: HistoryState = HistoryState(),
     val issues: IssuesState = IssuesState(),
+    val runs: RunsState = RunsState(),
     val download: DownloadState? = null,
     val filter: VisibilityFilter = VisibilityFilter.ALL,
     val search: String = "",
@@ -68,6 +69,14 @@ data class AppState(
     val mutating: Boolean = false,
     val error: String? = null,
     val notice: String? = null
+)
+
+data class RunsState(
+    val entries: List<GitHubWorkflowRun> = emptyList(),
+    val page: Int = 0,
+    val hasMore: Boolean = true,
+    val loading: Boolean = false,
+    val error: String? = null
 )
 
 data class IssuesState(
@@ -108,6 +117,7 @@ class MainViewModel(
     private var historyJob: Job? = null
     private var commitJob: Job? = null
     private var issuesJob: Job? = null
+    private var runsJob: Job? = null
     private var downloadJob: Job? = null
     private val mutable = MutableStateFlow(AppState(hasSession = token != null))
     val state = mutable.asStateFlow()
@@ -170,6 +180,7 @@ class MainViewModel(
         historyJob = null
         commitJob = null
         issuesJob = null
+        runsJob = null
         downloadJob = null
         api.clearCache()
         tokens.clear() // Removes local credentials; the token must be revoked on github.com separately.
@@ -196,6 +207,7 @@ class MainViewModel(
             DetailTab.RELEASES -> loadReleases(reset = true, forceRefresh = true)
             DetailTab.HISTORY -> loadHistory(reset = true, forceRefresh = true)
             DetailTab.ISSUES -> loadIssues(reset = true)
+            DetailTab.ACTIONS -> loadRuns(reset = true)
             DetailTab.OVERVIEW, DetailTab.CHANGES -> Unit
         }
     }
@@ -244,7 +256,7 @@ class MainViewModel(
             it.copy(
                 screen = Screen.DETAILS, selected = selected,
                 detailTab = DetailTab.FILES, browser = BrowserState(), releases = ReleaseState(),
-                history = HistoryState(), issues = IssuesState(),
+                history = HistoryState(), issues = IssuesState(), runs = RunsState(),
                 error = null, notice = null
             )
         }
@@ -287,6 +299,9 @@ class MainViewModel(
         }
         if (tab == DetailTab.ISSUES && mutable.value.issues.page == 0 && !mutable.value.issues.loading) {
             loadIssues(reset = true)
+        }
+        if (tab == DetailTab.ACTIONS && mutable.value.runs.page == 0 && !mutable.value.runs.loading) {
+            loadRuns(reset = true)
         }
         // Returning to «Код» must restore the open file or directory, not reset it to the repository root.
         if (tab == DetailTab.FILES && browser.fileName == null && browser.entries.isEmpty() &&
@@ -382,6 +397,29 @@ class MainViewModel(
                     }
                 } catch (e: CancellationException) { throw e }
                 catch (e: Exception) { mutable.update { it.copy(browser = it.browser.copy(loading = false, error = safeMessage(e))) } }
+            }
+        }
+    }
+
+    fun loadRuns(reset: Boolean = false, forceRefresh: Boolean = false) {
+        val active = token ?: return
+        val repo = mutable.value.selected ?: return
+        if (mutable.value.runs.loading && !(reset && forceRefresh)) return
+        runsJob?.cancel()
+        runsJob = viewModelScope.launch {
+            val page = if (reset) 1 else mutable.value.runs.page + 1
+            mutable.update { it.copy(runs = it.runs.copy(loading = true, error = null)) }
+            try {
+                val result = api.listWorkflowRuns(active, repo.owner.login, repo.name, page, forceRefresh)
+                mutable.update { old ->
+                    if (old.selected?.id != repo.id) old else old.copy(runs = old.runs.copy(
+                        entries = if (reset) result.entries else
+                            (old.runs.entries + result.entries).distinctBy { it.id },
+                        page = page, hasMore = result.hasMore, loading = false))
+                }
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                mutable.update { it.copy(runs = it.runs.copy(loading = false, error = safeMessage(e))) }
             }
         }
     }
