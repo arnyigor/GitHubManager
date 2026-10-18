@@ -60,6 +60,7 @@ data class AppState(
     val search: String = "",
     val page: Int = 0,
     val hasMore: Boolean = true,
+    val cacheSource: CacheSource = CacheSource.NETWORK,
     val loading: Boolean = false,
     val loggingIn: Boolean = false,
     val mutating: Boolean = false,
@@ -192,6 +193,7 @@ class MainViewModel(
                         (previous.repos + result.entries).distinctBy { it.id },
                     page = page,
                     hasMore = result.hasMore,
+                    cacheSource = result.source,
                     loading = false
                 )
             }

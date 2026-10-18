@@ -1,3 +1,38 @@
+# Reliability (P0.3 аудита): пагинация по `Link`, источник кэша, разбор 403, отмена (2026-10-18)
+
+## Что изменено
+
+- `domain/Pagination.kt` — `nextPageUrl(linkHeader)` и `hasNextPage(linkHeader, itemCount, perPage)`.
+  Приоритет у `Link: rel="next"`; старая эвристика «страница полная ⇒ есть следующая» осталась только
+  на случай полного отсутствия заголовка. **414 для `listRepositories` и `listReleases`**: `hasMore` больше не
+  выводится из `size == perPage`.
+- `domain/ApiErrors.kt` — `classifyFailure` (401 / 403-permissions / 403-rate-limit / 403-secondary / 404 / 409 / 422 / 429)
+  и `failureMessage`, который по `X-RateLimit-Reset` и `Retry-After` говорит, когда повторять.
+  Автоматических повторов нет.
+- `api/GitHubApi.kt` — `execute()` заменён на `enqueue()` + `invokeOnCancellation { call.cancel() }`,
+  поэтому смена экрана отменяет незавершённый запрос; `call()` теперь возвращает `body + source + link`.
+- `domain/Models.kt` — `CacheSource { NETWORK, VALIDATED_304, FRESH_CACHE, STALE_OFFLINE }` в `RepoPage`/`ReleasePage`.
+- `ui/GitHubManagerApp.kt` — при источнике, отличном от сети, под фильтрами появляется подпись
+  «Показаны сохранённые данные (кэш до 10 минут)» / «Данные актуальны (GitHub вернул 304)» / «Нет сети: показаны сохранённые данные».
+
+## Проверено
+
+| Проверка | Результат |
+|---|---|
+| `:app:testDebugUnitTest` | 38 тестов, 0 падений; новый `ReliabilityPoliciesTest` — 10 тестов |
+| `:app:assembleDebug` / `:app:assembleRelease` | BUILD SUCCESSFUL |
+| `:app:lintDebug` | 0 ошибок, 23 предупреждения |
+| Реальный `Link` от GitHub | заголовок последней страницы (`page=2`, 14 элементов) не содержит `rel="next"`; вставлен в тест как фикстура |
+| Источник кэша на эмуляторе | после перезапуска в пределах TTL под фильтрами видно «Показаны сохранённые данные (кэш до 10 минут)»; при загрузке из сети подписи нет |
+
+## Не проверено
+
+- 403 rate limit и secondary limit на живом аккаунте (проверено только разбором заголовков в unit-тестах).
+- Отмена запроса при быстрой навигации — код переведён на `enqueue`, но гонка «отмена во время чтения тела» вручную не воспроизводилась.
+- `STALE_OFFLINE` на устройстве (нужен полный обрыв сети с непустым кэшем).
+
+---
+
 # Verification — 0.4 preview: правка репозитория через GitHub API (2026-10-18)
 
 Пакет `GitHubManager-RemoteGit-v0.4-preview.zip` наложен на проект вручную (скрипт `apply_patch.py` не запускался:

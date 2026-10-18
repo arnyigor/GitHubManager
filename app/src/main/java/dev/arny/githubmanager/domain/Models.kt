@@ -52,7 +52,17 @@ data class GitHubContent(
     @SerialName("html_url") val htmlUrl: String? = null
 )
 
-data class RepoPage(val entries: List<GitHubRepository>, val hasMore: Boolean)
+/**
+ * Where the shown page came from. `STALE_OFFLINE` is a cache entry older than the TTL shown
+ * because the network failed; the UI must label it instead of pretending it is current.
+ */
+enum class CacheSource { NETWORK, VALIDATED_304, FRESH_CACHE, STALE_OFFLINE }
+
+data class RepoPage(
+    val entries: List<GitHubRepository>,
+    val hasMore: Boolean,
+    val source: CacheSource = CacheSource.NETWORK
+)
 
 sealed interface DirectoryResult {
     data class Directory(val entries: List<GitHubContent>) : DirectoryResult
@@ -83,4 +93,8 @@ data class GitHubReleaseAsset(
     val digest: String? = null
 )
 
-data class ReleasePage(val entries: List<GitHubRelease>, val hasMore: Boolean)
+data class ReleasePage(
+    val entries: List<GitHubRelease>,
+    val hasMore: Boolean,
+    val source: CacheSource = CacheSource.NETWORK
+)

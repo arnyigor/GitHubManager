@@ -338,6 +338,14 @@ private fun ReconnectionScreen(loading: Boolean, retry: () -> Unit, logout: () -
     }
 }
 
+/** The source of the shown page is labelled instead of pretending stale data is current. */
+private fun cacheSourceLabel(source: CacheSource): String? = when (source) {
+    CacheSource.NETWORK -> null
+    CacheSource.FRESH_CACHE -> "Показаны сохранённые данные (кэш до 10 минут)"
+    CacheSource.VALIDATED_304 -> "Данные актуальны (GitHub вернул 304)"
+    CacheSource.STALE_OFFLINE -> "Нет сети: показаны сохранённые данные"
+}
+
 @Composable
 private fun RepositoryScreen(state: AppState, vm: MainViewModel) {
     val shown = remember(state.repos, state.search, state.filter) {
@@ -362,6 +370,10 @@ private fun RepositoryScreen(state: AppState, vm: MainViewModel) {
                 Text("@${state.profile?.login ?: "—"} · ${shown.size}",
                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            cacheSourceLabel(state.cacheSource)?.let {
+                Text(it, style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         if (state.loading && state.page == 0) {
