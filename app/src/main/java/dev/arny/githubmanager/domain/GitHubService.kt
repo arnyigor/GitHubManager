@@ -30,6 +30,10 @@ interface GitHubService {
         forceRefresh: Boolean = false): CommitDetails =
         throw UnsupportedOperationException("Commit details not available")
 
+    suspend fun listIssues(token: String, owner: String, name: String, state: String,
+        page: Int = 1, forceRefresh: Boolean = false): IssuePage =
+        throw UnsupportedOperationException("Issues not available")
+
     suspend fun listReleases(token: String, owner: String, name: String, page: Int = 1, forceRefresh: Boolean = false): ReleasePage =
         throw UnsupportedOperationException("Releases not available")
     suspend fun downloadAsset(

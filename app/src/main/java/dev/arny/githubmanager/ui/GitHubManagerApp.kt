@@ -154,7 +154,7 @@ fun GitHubManagerApp(state: AppState, vm: MainViewModel) {
                                 }
                                 DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                                     if (state.screen == Screen.DETAILS) {
-                                        listOf(DetailTab.FILES, DetailTab.CHANGES, DetailTab.HISTORY, DetailTab.RELEASES, DetailTab.OVERVIEW).forEach { tab ->
+                                        listOf(DetailTab.FILES, DetailTab.CHANGES, DetailTab.HISTORY, DetailTab.ISSUES, DetailTab.RELEASES, DetailTab.OVERVIEW).forEach { tab ->
                                             DropdownMenuItem(
                                                 text = { Text(detailTabLabel(tab)) },
                                                 onClick = { showMenu = false; vm.setDetailTab(tab) }
@@ -281,6 +281,7 @@ private fun detailTabLabel(tab: DetailTab): String = when (tab) {
     DetailTab.FILES -> "Код"
     DetailTab.CHANGES -> "Изменения"
     DetailTab.HISTORY -> "История"
+    DetailTab.ISSUES -> "Issues"
     DetailTab.RELEASES -> "Релизы"
     DetailTab.OVERVIEW -> "Настройки"
 }
@@ -525,6 +526,11 @@ private fun DetailScreen(state: AppState, vm: MainViewModel) {
             DetailTab.FILES -> if (remote.editor != null) RemoteEditorScreen(remote, vm.remote)
                 else FileBrowser(state.browser, vm)
             DetailTab.CHANGES -> RemoteChangesScreen(remote, vm.remote)
+            DetailTab.ISSUES -> IssuesScreen(state.issues,
+                refresh = { vm.loadIssues(reset = true, forceRefresh = true) },
+                more = { vm.loadIssues() },
+                filter = vm::setIssueStateFilter,
+                toggle = vm::toggleIssue)
             DetailTab.HISTORY -> HistoryScreen(state.history,
                 refresh = { vm.loadHistory(reset = true, forceRefresh = true) },
                 more = { vm.loadHistory() },
@@ -732,6 +738,96 @@ private fun FileContentPanel(browser: BrowserState, markdownBase: MarkdownBase?)
         } else {
             CodeViewer(fileName = name, filePath = browser.directoryPath,
                 code = browser.fileBody.orEmpty(), url = browser.fileUrl, showPath = !isMarkdown)
+        }
+    }
+}
+
+@Composable
+private fun IssuesScreen(
+    issues: IssuesState,
+    refresh: () -> Unit,
+    more: () -> Unit,
+    filter: (String) -> Unit,
+    toggle: (Int) -> Unit
+) {
+    val context = LocalContext.current
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Text("Issues · ${issues.entries.size}", style = MaterialTheme.typography.titleLarge)
+        Text("Только просмотр. Открыть и обсудить — по ссылке на GitHub.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("open" to "Открытые", "closed" to "Закрытые").forEach { (value, label) ->
+                FilterChip(selected = issues.state == value, onClick = { filter(value) },
+                    label = { Text(label, style = MaterialTheme.typography.labelMedium) },
+                    shape = RoundedCornerShape(10.dp))
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        issues.error?.let {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(it, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall)
+                TextButton(onClick = refresh) { Text("Повторить") }
+            }
+        }
+        if (issues.loading && issues.entries.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            return@Column
+        }
+        if (!issues.loading && issues.entries.isEmpty() && issues.error == null) {
+            Text(if (issues.state == "open") "Открытых issues нет" else "Закрытых issues нет",
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            return@Column
+        }
+        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(issues.entries, key = { it.number }) { issue ->
+                Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+                    Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                        Row(Modifier.fillMaxWidth().clickable { toggle(issue.number) },
+                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Column(Modifier.weight(1f)) {
+                                Text(issueTitle(issue), maxLines = 2, overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                                Text("${issueStateLabel(issue.state)} · ${issueMeta(issue)}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                if (issue.labels.isNotEmpty()) {
+                                    Text(issue.labels.joinToString(" ") { it.name }, maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary)
+                                }
+                            }
+                            Icon(if (issues.openNumber == issue.number) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                "Показать описание issue", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        if (issues.openNumber == issue.number) {
+                            val body = issue.body?.takeIf { it.isNotBlank() }
+                            if (body == null) {
+                                Text("Описание не заполнено", style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            } else {
+                                MarkdownViewer(body, modifier = Modifier.fillMaxWidth(), scrollable = false)
+                            }
+                            val url = issue.htmlUrl
+                            if (url != null && url.startsWith("https://github.com/")) {
+                                TextButton(onClick = {
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                }) { Text("Открыть на GitHub") }
+                            }
+                        }
+                    }
+                }
+            }
+            if (issues.hasMore) item {
+                OutlinedButton(onClick = more, enabled = !issues.loading,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp), shape = RoundedCornerShape(10.dp)) {
+                    if (issues.loading) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                    else Text("Загрузить ещё 30")
+                }
+            }
         }
     }
 }

@@ -1,3 +1,21 @@
+# Issues (P2.2, read-only) — 2026-10-19
+
+- `domain/Models.kt`: `GitHubIssue` (+ `pull_request` как `JsonElement?`, чтобы отличить PR), `GitHubLabel`, `IssuePage`.
+- `GitHubService` / `GitHubApi`: `listIssues(state = open|closed, page)` — `/issues?state=&per_page=30`,
+  пагинация по `Link`; ответ фильтруется по `pullRequest == null`.
+- `domain/Issues.kt`: `onlyIssues`, `issueTitle`, `issueStateLabel`, `issueMeta` — чистые функции под тестами.
+- `MainViewModel`: `DetailTab.ISSUES`, `IssuesState`, `loadIssues`, `setIssueStateFilter`, `toggleIssue` (свой `issuesJob`).
+- UI: раздел «Issues» в меню, чипы «Открытые/Закрытые», раскрытие описания через `MarkdownViewer`, кнопка «Открыть на GitHub».
+
+Проверено:
+- unit-тесты `IssuesParsingTest` (4) на реальном JSON `/issues`, включая запись с `pull_request`;
+- `:app:testDebugUnitTest` — 58 тестов, 0 падений.
+
+Не проверено: пагинация «Загрузить ещё 30», issues с вложениями и длинными тредами комментариев,
+фильтр по labels/assignee, PR-список и комментарии (не реализованы).
+
+---
+
 # Code review (P2.1): история коммитов и diff коммита (2026-10-18)
 
 - `domain/Models.kt`: `GitHubCommit`, `CommitFile`, `CommitDetails`, `CommitPage` (+ `CacheSource`).

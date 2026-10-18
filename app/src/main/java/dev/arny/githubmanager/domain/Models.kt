@@ -122,6 +122,31 @@ data class CommitFile(
 @Serializable
 data class CommitDetails(val files: List<CommitFile> = emptyList())
 
+@Serializable
+data class GitHubLabel(val name: String, val color: String = "ededed")
+
+@Serializable
+data class GitHubIssue(
+    val number: Int,
+    val title: String,
+    val state: String = "open",
+    val body: String? = null,
+    val user: RepoOwner? = null,
+    val comments: Int = 0,
+    @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("updated_at") val updatedAt: String? = null,
+    @SerialName("html_url") val htmlUrl: String? = null,
+    val labels: List<GitHubLabel> = emptyList(),
+    /** Present only for pull requests: /issues returns both kinds. */
+    @SerialName("pull_request") val pullRequest: kotlinx.serialization.json.JsonElement? = null
+)
+
+data class IssuePage(
+    val entries: List<GitHubIssue>,
+    val hasMore: Boolean,
+    val source: CacheSource = CacheSource.NETWORK
+)
+
 data class CommitPage(
     val entries: List<GitHubCommit>,
     val hasMore: Boolean,

@@ -24,7 +24,7 @@ import kotlinx.coroutines.withContext
 private const val MAX_FILE_BYTES = 2_000_000L
 
 enum class Screen { REPOSITORIES, DETAILS }
-enum class DetailTab { OVERVIEW, FILES, CHANGES, HISTORY, RELEASES }
+enum class DetailTab { OVERVIEW, FILES, CHANGES, HISTORY, ISSUES, RELEASES }
 
 data class BrowserState(
     val directoryPath: String = "",
@@ -56,6 +56,7 @@ data class AppState(
     val browser: BrowserState = BrowserState(),
     val releases: ReleaseState = ReleaseState(),
     val history: HistoryState = HistoryState(),
+    val issues: IssuesState = IssuesState(),
     val download: DownloadState? = null,
     val filter: VisibilityFilter = VisibilityFilter.ALL,
     val search: String = "",
@@ -67,6 +68,16 @@ data class AppState(
     val mutating: Boolean = false,
     val error: String? = null,
     val notice: String? = null
+)
+
+data class IssuesState(
+    val entries: List<GitHubIssue> = emptyList(),
+    val page: Int = 0,
+    val hasMore: Boolean = true,
+    val loading: Boolean = false,
+    val error: String? = null,
+    val state: String = "open",
+    val openNumber: Int? = null
 )
 
 data class HistoryState(
@@ -96,6 +107,7 @@ class MainViewModel(
     private var releaseJob: Job? = null
     private var historyJob: Job? = null
     private var commitJob: Job? = null
+    private var issuesJob: Job? = null
     private var downloadJob: Job? = null
     private val mutable = MutableStateFlow(AppState(hasSession = token != null))
     val state = mutable.asStateFlow()
@@ -157,6 +169,7 @@ class MainViewModel(
         releaseJob = null
         historyJob = null
         commitJob = null
+        issuesJob = null
         downloadJob = null
         api.clearCache()
         tokens.clear() // Removes local credentials; the token must be revoked on github.com separately.
@@ -182,6 +195,7 @@ class MainViewModel(
             DetailTab.FILES -> refreshBrowser()
             DetailTab.RELEASES -> loadReleases(reset = true, forceRefresh = true)
             DetailTab.HISTORY -> loadHistory(reset = true, forceRefresh = true)
+            DetailTab.ISSUES -> loadIssues(reset = true)
             DetailTab.OVERVIEW, DetailTab.CHANGES -> Unit
         }
     }
@@ -230,7 +244,7 @@ class MainViewModel(
             it.copy(
                 screen = Screen.DETAILS, selected = selected,
                 detailTab = DetailTab.FILES, browser = BrowserState(), releases = ReleaseState(),
-                history = HistoryState(),
+                history = HistoryState(), issues = IssuesState(),
                 error = null, notice = null
             )
         }
@@ -270,6 +284,9 @@ class MainViewModel(
         }
         if (tab == DetailTab.HISTORY && mutable.value.history.page == 0 && !mutable.value.history.loading) {
             loadHistory(reset = true)
+        }
+        if (tab == DetailTab.ISSUES && mutable.value.issues.page == 0 && !mutable.value.issues.loading) {
+            loadIssues(reset = true)
         }
         // Returning to «Код» must restore the open file or directory, not reset it to the repository root.
         if (tab == DetailTab.FILES && browser.fileName == null && browser.entries.isEmpty() &&
@@ -366,6 +383,44 @@ class MainViewModel(
                 } catch (e: CancellationException) { throw e }
                 catch (e: Exception) { mutable.update { it.copy(browser = it.browser.copy(loading = false, error = safeMessage(e))) } }
             }
+        }
+    }
+
+    fun setIssueStateFilter(state: String) {
+        if (state != "open" && state != "closed") return
+        if (mutable.value.issues.state == state && mutable.value.issues.page > 0) return
+        mutable.update { it.copy(issues = IssuesState(state = state)) }
+        loadIssues(reset = true)
+    }
+
+    fun loadIssues(reset: Boolean = false, forceRefresh: Boolean = false) {
+        val active = token ?: return
+        val repo = mutable.value.selected ?: return
+        if (mutable.value.issues.loading && !(reset && forceRefresh)) return
+        issuesJob?.cancel()
+        issuesJob = viewModelScope.launch {
+            val page = if (reset) 1 else mutable.value.issues.page + 1
+            val state = mutable.value.issues.state
+            mutable.update { it.copy(issues = it.issues.copy(loading = true, error = null)) }
+            try {
+                val result = api.listIssues(active, repo.owner.login, repo.name, state, page, forceRefresh)
+                mutable.update { old ->
+                    if (old.selected?.id != repo.id) old else old.copy(issues = old.issues.copy(
+                        entries = if (reset) result.entries else
+                            (old.issues.entries + result.entries).distinctBy { it.number },
+                        page = page, hasMore = result.hasMore, loading = false))
+                }
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                mutable.update { it.copy(issues = it.issues.copy(loading = false, error = safeMessage(e))) }
+            }
+        }
+    }
+
+    /** One issue body at a time, like commits in the history list. */
+    fun toggleIssue(number: Int) {
+        mutable.update { old ->
+            old.copy(issues = old.issues.copy(openNumber = if (old.issues.openNumber == number) null else number))
         }
     }
 
